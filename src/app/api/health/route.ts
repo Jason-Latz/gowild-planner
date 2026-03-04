@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { okJson } from "@/lib/api/responses";
 
 import { checkProvidersHealth } from "@/lib/providers/provider-manager";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +16,7 @@ export async function GET() {
 
   const providerHealth = await checkProvidersHealth();
 
-  return NextResponse.json({
+  return okJson({
     ok: dbOk,
     db: {
       ok: dbOk,

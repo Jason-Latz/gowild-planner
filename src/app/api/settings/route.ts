@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 
+import { AppError } from "@/lib/api/errors";
+import { checkRateLimit } from "@/lib/api/rate-limit";
+import { errorJson, okJson } from "@/lib/api/responses";
 import { resolveUserEmail } from "@/lib/auth/user-context";
 import { getSettings, updateSettings } from "@/lib/services/settings-service";
 
@@ -17,24 +20,54 @@ const settingsSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit({
+      request,
+      namespace: "settings:read",
+      max: 120,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimit.allowed) {
+      throw new AppError({
+        message: "Rate limit exceeded",
+        status: 429,
+        code: "RATE_LIMITED",
+        details: { retryAfterSeconds: rateLimit.retryAfterSeconds },
+      });
+    }
+
     const email = await resolveUserEmail(request);
     const settings = await getSettings(email);
-    return NextResponse.json(settings);
+    return okJson(settings);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not load settings";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return errorJson(error);
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit({
+      request,
+      namespace: "settings:write",
+      max: 30,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimit.allowed) {
+      throw new AppError({
+        message: "Rate limit exceeded",
+        status: 429,
+        code: "RATE_LIMITED",
+        details: { retryAfterSeconds: rateLimit.retryAfterSeconds },
+      });
+    }
+
     const email = await resolveUserEmail(request);
     const payload = await request.json();
     const parsed = settingsSchema.parse(payload);
     const settings = await updateSettings(email, parsed);
-    return NextResponse.json(settings);
+    return okJson(settings);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not update settings";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return errorJson(error);
   }
 }
