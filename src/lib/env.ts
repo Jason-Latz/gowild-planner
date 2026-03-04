@@ -7,6 +7,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional().or(z.literal("")),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional().or(z.literal("")),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().or(z.literal("")),
+  ALLOW_HEADER_AUTH: z
+    .union([z.string(), z.boolean()])
+    .optional()
+    .transform((value) => value === "true" || value === true),
   PROVIDER_A_BASE_URL: z.string().url().optional().or(z.literal("")),
   PROVIDER_A_API_KEY: z.string().optional().or(z.literal("")),
   PROVIDER_B_BASE_URL: z.string().url().optional().or(z.literal("")),
@@ -27,6 +31,10 @@ export const env = parsed.data;
 
 export function hasSupabaseConfig() {
   return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+export function allowHeaderAuth() {
+  return process.env.NODE_ENV !== "production" || Boolean(env.ALLOW_HEADER_AUTH);
 }
 
 export function hasResendConfig() {

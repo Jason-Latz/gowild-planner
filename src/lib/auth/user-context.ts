@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 
+import { UnauthorizedError } from "@/lib/api/errors";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
+import { allowHeaderAuth } from "@/lib/env";
 
 const EMAIL_HEADER = "x-user-email";
 const DEMO_EMAIL = "demo@gowild.local";
@@ -11,7 +13,7 @@ function isValidEmail(value: string) {
 
 export async function resolveUserEmail(request?: NextRequest) {
   const headerEmail = request?.headers.get(EMAIL_HEADER)?.trim().toLowerCase();
-  if (headerEmail && isValidEmail(headerEmail)) {
+  if (allowHeaderAuth() && headerEmail && isValidEmail(headerEmail)) {
     return headerEmail;
   }
 
@@ -31,5 +33,5 @@ export async function resolveUserEmail(request?: NextRequest) {
     return DEMO_EMAIL;
   }
 
-  throw new Error("Could not resolve authenticated user email.");
+  throw new UnauthorizedError("Could not resolve authenticated user email.");
 }
