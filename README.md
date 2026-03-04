@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GoWild Explorer
 
-## Getting Started
+Supabase-first Next.js app for exploring Frontier itineraries with return-feasibility checks, saved watches, and a Thursday weekend digest.
 
-First, run the development server:
+## What It Implements
+
+- One-to-many search from an origin metro group (default `CHI = ORD + MDW`).
+- Direct, 1-stop, and 2-stop itinerary generation.
+- Return feasibility checks to the same origin metro (`requireReturn` defaults to `true`).
+- Saved watches with deduped alert emails.
+- Thursday weekly digest for weekend-capable round trips.
+- Manual booking handoff via Frontier booking URL generation.
+- Provider adapter failover (A -> B) with normalized cache in Postgres.
+
+## Tech Stack
+
+- Next.js 16 (App Router + TypeScript + Tailwind)
+- Prisma ORM with Postgres (Supabase)
+- Optional Supabase Auth session support + header fallback in development
+- Resend for email delivery
+- Vercel Cron support (`/api/digest/run`)
+
+## Environment
+
+Copy `.env.example` to `.env` and set values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required for full runtime:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `DATABASE_URL`
+- `CRON_SECRET`
+- `RESEND_API_KEY` + `ALERT_FROM_EMAIL` (for real email)
+- Provider credentials (`PROVIDER_A_*`, optional `PROVIDER_B_*`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+```bash
+npm install
+npm run prisma:generate
+npm run db:push
+npm run db:seed
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `GET /api/search?originGroup=CHI&departDate=YYYY-MM-DD&maxStops=2&requireReturn=true&minNights=1&maxNights=3`
+- `POST /api/watches`
+- `GET /api/watches`
+- `DELETE /api/watches/:id`
+- `GET /api/settings`
+- `PUT /api/settings`
+- `POST /api/digest/run` (requires `x-cron-secret` or `Authorization: Bearer <CRON_SECRET>`)
+- `GET /api/health`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Testing and Lint
 
-## Deploy on Vercel
+```bash
+npm run lint
+npm run test
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Vercel Cron
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`vercel.json` schedules `/api/digest/run` hourly.
+
+Make sure Vercel has `CRON_SECRET` configured so cron authorization succeeds.
+
+## Notes on Frontier Safety
+
+- No automated login/booking flows are implemented.
+- No Frontier credential or cookie storage is implemented.
+- Handoff is manual via Frontier booking page link.
