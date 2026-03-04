@@ -1,0 +1,19 @@
+name: Architecture Guard
+
+on:
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure architecture.md updated with core changes
+        run: |
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${{ github.event.pull_request.base.ref }}"
+          ./scripts/check-architecture-update.sh "$BASE" "HEAD"

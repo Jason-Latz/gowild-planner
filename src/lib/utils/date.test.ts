@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getUpcomingWeekendDepartures, isWeeklySendWindow } from "@/lib/utils/date";
+import { getUpcomingWeekendDepartures, isValidDateOnly, isWeeklySendWindow } from "@/lib/utils/date";
 
 describe("date utils", () => {
   it("matches Thursday send window by local timezone", () => {
@@ -22,5 +22,10 @@ describe("date utils", () => {
     const departures = getUpcomingWeekendDepartures(now, "America/Chicago");
 
     expect(departures).toEqual(["2026-03-06", "2026-03-07"]);
+  });
+
+  it("validates strict yyyy-mm-dd dates", () => {
+    expect(isValidDateOnly("2026-02-28")).toBe(true);
+    expect(isValidDateOnly("2026-02-30")).toBe(false);
   });
 });

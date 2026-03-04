@@ -17,4 +17,13 @@ describe("search request schema", () => {
     expect(parsed.minNights).toBe(2);
     expect(parsed.maxNights).toBe(4);
   });
+
+  it("rejects invalid calendar dates", () => {
+    expect(() =>
+      searchRequestSchema.parse({
+        originGroup: "CHI",
+        departDate: "2026-02-30",
+      }),
+    ).toThrowError();
+  });
 });
