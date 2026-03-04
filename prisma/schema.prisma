@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DateMode {
+  TOMORROW
+  EXACT_DATE
+}
+
+enum DigestType {
+  WEEKEND
+}
+
+enum AlertType {
+  WATCH_RESULT
+  DIGEST
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  timezone           String             @default("America/Chicago")
+  defaultOriginGroup String             @default("CHI")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  watchRules         WatchRule[]
+  digestPreference   DigestPreference?
+  digestEvents       DigestEvent[]
+  alertEvents        AlertEvent[]
+}
+
+model OriginGroup {
+  id          String               @id @default(cuid())
+  code        String               @unique
+  name        String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  airports    OriginGroupAirport[]
+}
+
+model OriginGroupAirport {
+  id            String      @id @default(cuid())
+  originGroupId String
+  airportCode   String
+  position      Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  originGroup   OriginGroup @relation(fields: [originGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([originGroupId, airportCode])
+}
+
+model ProviderLegCache {
+  id          String   @id @default(cuid())
+  provider    String
+  airportCode String
+  serviceDate DateTime
+  carrier     String
+  payload     Json
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([airportCode, serviceDate, carrier])
+  @@index([provider, airportCode, serviceDate])
+}
+
+model SearchResultsCache {
+  id            String   @id @default(cuid())
+  queryHash     String   @unique
+  originGroup   String
+  departDate    DateTime
+  requireReturn Boolean
+  minNights     Int
+  maxNights     Int
+  payload       Json
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([originGroup, departDate, requireReturn, minNights, maxNights])
+}
+
+model WatchRule {
+  id            String    @id @default(cuid())
+  userId        String
+  originGroup   String
+  dateMode      DateMode  @default(TOMORROW)
+  exactDate     DateTime?
+  maxStops      Int       @default(2)
+  requireReturn Boolean   @default(true)
+  minNights     Int       @default(1)
+  maxNights     Int       @default(3)
+  filters       Json?
+  emailEnabled  Boolean   @default(true)
+  digestEnabled Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alertEvents   AlertEvent[]
+
+  @@index([userId])
+}
+
+model DigestPreference {
+  id             String   @id @default(cuid())
+  userId          String   @unique
+  sendDay         Int      @default(4)
+  sendLocalTime   String   @default("08:00")
+  minNights       Int      @default(1)
+  maxNights       Int      @default(3)
+  topN            Int      @default(15)
+  sendEmptyDigest Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DigestEvent {
+  id         String     @id @default(cuid())
+  userId     String
+  digestType DigestType @default(WEEKEND)
+  isoWeek    String
+  fingerprint String
+  hadResults Boolean
+  payload    Json
+  messageId  String?
+  sentAt     DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, isoWeek, digestType])
+  @@index([userId, sentAt])
+}
+
+model AlertEvent {
+  id         String    @id @default(cuid())
+  userId     String
+  watchRuleId String?
+  alertType  AlertType @default(WATCH_RESULT)
+  dedupeHash String    @unique
+  destination String?
+  payload    Json
+  sentAt     DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchRule  WatchRule? @relation(fields: [watchRuleId], references: [id], onDelete: SetNull)
+
+  @@index([userId, sentAt])
+}
