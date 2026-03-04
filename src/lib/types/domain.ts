@@ -42,6 +42,8 @@ export type SearchResultCard = {
   bestOutbound: Itinerary;
   returnCheck: ReturnCheck;
   bookingUrl: string;
+  bookingFallbackUrl: string;
+  bookingDetailsText: string;
 };
 
 export type SearchResponse = {
@@ -78,4 +80,5 @@ export type DigestRunResult = {
   processedUsers: number;
   sentEmails: number;
   skippedUsers: number;
+  failedUsers: number;
 };

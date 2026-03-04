@@ -14,12 +14,16 @@ import { buildItineraries, sortItineraries } from "@/lib/services/itinerary-serv
 import { getOriginGroupAirports } from "@/lib/services/user-service";
 import type { Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/lib/types/domain";
 import { hashPayload } from "@/lib/utils/hash";
-import { parseDateOnly, toDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
+import { isValidDateOnly, parseDateOnly, toDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
 
 export const searchRequestSchema = z
   .object({
     originGroup: z.string().trim().min(2).max(6).default(DEFAULT_ORIGIN_GROUP),
-    departDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    departDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine((value) => isValidDateOnly(value), "departDate must be a valid YYYY-MM-DD date")
+      .optional(),
     maxStops: z.coerce.number().int().min(0).max(2).default(2),
     requireReturn: z
       .union([z.boolean(), z.string()])
@@ -226,6 +230,8 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
       bestOutbound,
       returnCheck,
       bookingUrl: booking.bookingUrl,
+      bookingFallbackUrl: booking.fallbackUrl,
+      bookingDetailsText: booking.detailsText,
     });
   }
 

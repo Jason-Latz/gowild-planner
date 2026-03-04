@@ -23,6 +23,14 @@ type PathState = {
   visitedAirports: Set<string>;
 };
 
+function toDateOnlyFromIso(iso: string) {
+  return iso.slice(0, 10);
+}
+
+function matchesServiceDate(leg: FlightLeg, serviceDate: string) {
+  return toDateOnlyFromIso(leg.depTs) === serviceDate;
+}
+
 function isDomesticAirport(airportCode: string) {
   return US_AIRPORTS.has(airportCode);
 }
@@ -138,6 +146,10 @@ export async function buildItineraries(input: BuildItinerariesInput): Promise<It
       }
 
       if (departure.origin !== currentAirport) {
+        continue;
+      }
+
+      if (!matchesServiceDate(departure, input.serviceDate)) {
         continue;
       }
 

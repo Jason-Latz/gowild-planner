@@ -1,5 +1,6 @@
 import {
   addDays,
+  isValid,
   format,
   getISOWeek,
   isAfter,
@@ -18,6 +19,11 @@ export function toDateOnly(date: Date): string {
 
 export function parseDateOnly(value: string): Date {
   return parse(value, "yyyy-MM-dd", new Date());
+}
+
+export function isValidDateOnly(value: string) {
+  const parsed = parseDateOnly(value);
+  return isValid(parsed) && toDateOnly(parsed) === value;
 }
 
 export function tomorrowDateOnly(base = new Date()): string {
