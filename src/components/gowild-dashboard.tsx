@@ -1,42 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 
+import type { SearchResponse, SearchResultCard } from "@/lib/types/domain";
 import { tomorrowDateOnly } from "@/lib/utils/date";
 
-type SearchResult = {
-  destination: string;
-  bookingUrl: string;
-  bestOutbound: {
-    stops: number;
-    totalMinutes: number;
-    legs: Array<{
-      origin: string;
-      destination: string;
-      depTs: string;
-      arrTs: string;
-      carrier: string;
-      flightNo: string;
-    }>;
-  };
-  returnCheck: {
-    feasible: boolean;
-    reason?: string;
-    bestReturnDate?: string;
-    bestReturn?: {
-      stops: number;
-      totalMinutes: number;
-      legs: Array<{
-        origin: string;
-        destination: string;
-        depTs: string;
-        arrTs: string;
-        carrier: string;
-        flightNo: string;
-      }>;
-    };
-  };
-};
+type SearchResult = SearchResultCard;
 
 type Watch = {
   id: string;
@@ -74,6 +44,12 @@ type SearchState = {
   maxNights: number;
 };
 
+type HealthState = {
+  ok: boolean;
+  db: { ok: boolean };
+  providers: Array<{ id: string; ok: boolean; message?: string }>;
+};
+
 function formatMinutes(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -82,6 +58,13 @@ function formatMinutes(minutes: number) {
 
 function formatLeg(leg: SearchResult["bestOutbound"]["legs"][number]) {
   return `${leg.origin} -> ${leg.destination} (${leg.carrier}${leg.flightNo})`;
+}
+
+function formatLegWithTime(leg: SearchResult["bestOutbound"]["legs"][number]) {
+  return `${formatLeg(leg)} • ${format(new Date(leg.depTs), "EEE HH:mm")} - ${format(
+    new Date(leg.arrTs),
+    "EEE HH:mm",
+  )}`;
 }
 
 const FALLBACK_EMAIL = "demo@gowild.local";
@@ -103,6 +86,7 @@ export function GoWildDashboard() {
   const [watches, setWatches] = useState<Watch[]>([]);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [status, setStatus] = useState<string>("");
+  const [health, setHealth] = useState<HealthState | null>(null);
 
   useEffect(() => {
     const storedEmail = window.localStorage.getItem("gowild_email");
@@ -145,6 +129,17 @@ export function GoWildDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
+  useEffect(() => {
+    fetch("/api/health")
+      .then((response) => response.json())
+      .then((payload: HealthState) => {
+        setHealth(payload);
+      })
+      .catch(() => {
+        setHealth(null);
+      });
+  }, []);
+
   async function runSearch() {
     setIsSearching(true);
     setStatus("");
@@ -165,10 +160,7 @@ export function GoWildDashboard() {
         throw new Error(payload.error || "Search failed");
       }
 
-      const payload = (await response.json()) as {
-        meta: { source: "cache" | "fresh" };
-        results: SearchResult[];
-      };
+      const payload = (await response.json()) as SearchResponse;
 
       setResults(payload.results);
       setMetaSource(payload.meta.source);
@@ -258,6 +250,15 @@ export function GoWildDashboard() {
     setStatus("Settings saved.");
   }
 
+  async function copyBookingDetails(result: SearchResult) {
+    try {
+      await navigator.clipboard.writeText(result.bookingDetailsText);
+      setStatus(`Copied booking details for ${result.destination}.`);
+    } catch {
+      setStatus("Could not copy booking details from browser.");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#ffd79f_0%,_#ffb38b_28%,_#f8f3eb_70%)] text-stone-900">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6 md:p-10">
@@ -268,6 +269,27 @@ export function GoWildDashboard() {
             Find direct and connecting Frontier options, keep booking manual on Frontier, and get a Thursday
             weekend digest for return-feasible trips.
           </p>
+          {health ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className={`rounded-full px-3 py-1 font-semibold ${
+                  health.db.ok ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"
+                }`}
+              >
+                DB: {health.db.ok ? "healthy" : "down"}
+              </span>
+              {health.providers.map((provider) => (
+                <span
+                  key={provider.id}
+                  className={`rounded-full px-3 py-1 font-semibold ${
+                    provider.ok ? "bg-sky-100 text-sky-900" : "bg-amber-100 text-amber-900"
+                  }`}
+                >
+                  {provider.id}: {provider.ok ? "ok" : provider.message || "degraded"}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </header>
 
         <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
@@ -561,7 +583,9 @@ export function GoWildDashboard() {
                     <p className="font-medium">Outbound legs</p>
                     <ul className="mt-1 list-disc space-y-1 pl-5">
                       {result.bestOutbound.legs.map((leg) => (
-                        <li key={`${result.destination}-${leg.flightNo}-${leg.depTs}`}>{formatLeg(leg)}</li>
+                        <li key={`${result.destination}-${leg.flightNo}-${leg.depTs}`}>
+                          {formatLegWithTime(leg)}
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -571,20 +595,39 @@ export function GoWildDashboard() {
                       <p className="font-medium">Return legs</p>
                       <ul className="mt-1 list-disc space-y-1 pl-5">
                         {result.returnCheck.bestReturn.legs.map((leg) => (
-                          <li key={`${result.destination}-return-${leg.flightNo}-${leg.depTs}`}>{formatLeg(leg)}</li>
+                          <li key={`${result.destination}-return-${leg.flightNo}-${leg.depTs}`}>
+                            {formatLegWithTime(leg)}
+                          </li>
                         ))}
                       </ul>
                     </div>
                   ) : null}
 
-                  <a
-                    className="mt-4 inline-flex rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-700"
-                    href={result.bookingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Book on Frontier
-                  </a>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <a
+                      className="inline-flex rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-700"
+                      href={result.bookingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Book on Frontier
+                    </a>
+                    <a
+                      className="inline-flex rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                      href={result.bookingFallbackUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open fallback page
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => copyBookingDetails(result)}
+                      className="inline-flex rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                    >
+                      Copy details
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
