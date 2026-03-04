@@ -80,95 +80,105 @@ export async function runDigest(now = new Date()): Promise<DigestRunResult> {
   let processedUsers = 0;
   let sentEmails = 0;
   let skippedUsers = 0;
+  let failedUsers = 0;
 
   for (const user of users) {
-    const preference = user.digestPreference;
+    try {
+      const preference = user.digestPreference;
 
-    if (!preference) {
-      skippedUsers += 1;
-      continue;
-    }
+      if (!preference) {
+        skippedUsers += 1;
+        continue;
+      }
 
-    const shouldSend = isWeeklySendWindow({
-      now,
-      timezone: user.timezone,
-      sendDay: preference.sendDay,
-      sendLocalTime: preference.sendLocalTime,
-    });
-
-    if (!shouldSend) {
-      skippedUsers += 1;
-      continue;
-    }
-
-    const isoWeek = getIsoWeekKey(toZonedTime(now, user.timezone));
-
-    const existing = await prisma.digestEvent.findFirst({
-      where: {
-        userId: user.id,
-        isoWeek,
-        digestType: DigestType.WEEKEND,
-      },
-    });
-
-    if (existing) {
-      skippedUsers += 1;
-      continue;
-    }
-
-    const trips = await collectWeekendTrips({
-      originGroup: user.defaultOriginGroup,
-      timezone: user.timezone,
-      minNights: preference.minNights,
-      maxNights: preference.maxNights,
-      topN: preference.topN,
-      now,
-    });
-
-    const hadResults = trips.length > 0;
-    let messageId: string | null = null;
-
-    if (hadResults || preference.sendEmptyDigest) {
-      const response = await sendWeekendDigestEmail({
-        to: user.email,
+      const shouldSend = isWeeklySendWindow({
+        now,
         timezone: user.timezone,
-        trips,
-        hadResults,
+        sendDay: preference.sendDay,
+        sendLocalTime: preference.sendLocalTime,
       });
-      messageId = response.id;
-      sentEmails += 1;
-    }
 
-    await prisma.digestEvent.create({
-      data: {
-        userId: user.id,
-        digestType: DigestType.WEEKEND,
-        isoWeek,
-        fingerprint: hashPayload(
-          trips.map((trip) => ({
-            destination: trip.destination,
-            departDate: trip.departDate,
-            returnDate: trip.returnDate,
-            score: getTripScore(trip),
-          })),
-        ),
-        hadResults,
-        payload: {
-          ranAt: now.toISOString(),
-          trips,
-          timezone: user.timezone,
-          weekendOf: toDateOnly(now),
+      if (!shouldSend) {
+        skippedUsers += 1;
+        continue;
+      }
+
+      const isoWeek = getIsoWeekKey(toZonedTime(now, user.timezone));
+
+      const existing = await prisma.digestEvent.findFirst({
+        where: {
+          userId: user.id,
+          isoWeek,
+          digestType: DigestType.WEEKEND,
         },
-        messageId,
-      },
-    });
+      });
 
-    processedUsers += 1;
+      if (existing) {
+        skippedUsers += 1;
+        continue;
+      }
+
+      const trips = await collectWeekendTrips({
+        originGroup: user.defaultOriginGroup,
+        timezone: user.timezone,
+        minNights: preference.minNights,
+        maxNights: preference.maxNights,
+        topN: preference.topN,
+        now,
+      });
+
+      const hadResults = trips.length > 0;
+      let messageId: string | null = null;
+
+      if (hadResults || preference.sendEmptyDigest) {
+        const response = await sendWeekendDigestEmail({
+          to: user.email,
+          timezone: user.timezone,
+          trips,
+          hadResults,
+        });
+        messageId = response.id;
+        sentEmails += 1;
+      }
+
+      await prisma.digestEvent.create({
+        data: {
+          userId: user.id,
+          digestType: DigestType.WEEKEND,
+          isoWeek,
+          fingerprint: hashPayload(
+            trips.map((trip) => ({
+              destination: trip.destination,
+              departDate: trip.departDate,
+              returnDate: trip.returnDate,
+              score: getTripScore(trip),
+            })),
+          ),
+          hadResults,
+          payload: {
+            ranAt: now.toISOString(),
+            trips,
+            timezone: user.timezone,
+            weekendOf: toDateOnly(now),
+          },
+          messageId,
+        },
+      });
+
+      processedUsers += 1;
+    } catch (error) {
+      failedUsers += 1;
+      console.error("digest-user-failure", {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return {
     processedUsers,
     sentEmails,
     skippedUsers,
+    failedUsers,
   };
 }

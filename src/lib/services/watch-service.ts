@@ -1,6 +1,7 @@
 import { DateMode, Prisma } from "@prisma/client";
 import { z } from "zod";
 
+import { NotFoundError, ValidationError } from "@/lib/api/errors";
 import { DEFAULT_ORIGIN_GROUP } from "@/lib/constants";
 import { sendWatchAlertEmail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
@@ -42,12 +43,40 @@ export async function createWatch(email: string, input: z.input<typeof watchInpu
   const user = await getOrCreateUserByEmail(email);
   const data = watchInputSchema.parse(input);
 
+  if (data.dateMode === DateMode.EXACT_DATE && !data.exactDate) {
+    throw new ValidationError("exactDate is required for EXACT_DATE watches");
+  }
+
+  const exactDate = data.exactDate ? new Date(`${data.exactDate}T00:00:00.000Z`) : null;
+
+  const existing = await prisma.watchRule.findFirst({
+    where: {
+      userId: user.id,
+      originGroup: data.originGroup,
+      dateMode: data.dateMode,
+      exactDate,
+      maxStops: data.maxStops,
+      requireReturn: data.requireReturn,
+      minNights: data.minNights,
+      maxNights: data.maxNights,
+      emailEnabled: data.emailEnabled,
+      digestEnabled: data.digestEnabled,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
   const watch = await prisma.watchRule.create({
     data: {
       userId: user.id,
       originGroup: data.originGroup,
       dateMode: data.dateMode,
-      exactDate: data.exactDate ? new Date(`${data.exactDate}T00:00:00.000Z`) : null,
+      exactDate,
       maxStops: data.maxStops,
       requireReturn: data.requireReturn,
       minNights: data.minNights,
@@ -85,7 +114,7 @@ export async function deleteWatch(email: string, watchId: string) {
   });
 
   if (!watch) {
-    throw new Error("Watch not found");
+    throw new NotFoundError("Watch not found");
   }
 
   await prisma.watchRule.delete({
@@ -106,67 +135,77 @@ export async function runWatchAlerts() {
   });
 
   let sent = 0;
+  let failed = 0;
 
   for (const watch of activeWatches) {
-    const departDate = deriveDepartDate(watch.dateMode, watch.exactDate);
+    try {
+      const departDate = deriveDepartDate(watch.dateMode, watch.exactDate);
 
-    const search = await searchFlights({
-      originGroup: watch.originGroup,
-      departDate,
-      maxStops: watch.maxStops,
-      requireReturn: watch.requireReturn,
-      minNights: watch.minNights,
-      maxNights: watch.maxNights,
-    });
+      const search = await searchFlights({
+        originGroup: watch.originGroup,
+        departDate,
+        maxStops: watch.maxStops,
+        requireReturn: watch.requireReturn,
+        minNights: watch.minNights,
+        maxNights: watch.maxNights,
+      });
 
-    const topResults = search.results.slice(0, 10);
-    if (topResults.length === 0) {
-      continue;
-    }
+      const topResults = search.results.slice(0, 10);
+      if (topResults.length === 0) {
+        continue;
+      }
 
-    const dedupeHash = hashPayload({
-      watchId: watch.id,
-      topResults: topResults.map((result) => ({
-        destination: result.destination,
-        outboundScore: result.bestOutbound.score,
-        returnScore: result.returnCheck.bestReturn?.score ?? null,
-      })),
-    });
+      const dedupeHash = hashPayload({
+        watchId: watch.id,
+        topResults: topResults.map((result) => ({
+          destination: result.destination,
+          outboundScore: result.bestOutbound.score,
+          returnScore: result.returnCheck.bestReturn?.score ?? null,
+        })),
+      });
 
-    const existing = await prisma.alertEvent.findUnique({
-      where: {
-        dedupeHash,
-      },
-    });
-
-    if (existing) {
-      continue;
-    }
-
-    const emailResponse = await sendWatchAlertEmail({
-      to: watch.user.email,
-      watchName: watch.originGroup,
-      results: topResults,
-    });
-
-    await prisma.alertEvent.create({
-      data: {
-        userId: watch.userId,
-        watchRuleId: watch.id,
-        dedupeHash,
-        destination: topResults[0]?.destination,
-        payload: {
-          results: topResults,
-          messageId: emailResponse.id,
+      const existing = await prisma.alertEvent.findUnique({
+        where: {
+          dedupeHash,
         },
-      },
-    });
+      });
 
-    sent += 1;
+      if (existing) {
+        continue;
+      }
+
+      const emailResponse = await sendWatchAlertEmail({
+        to: watch.user.email,
+        watchName: watch.originGroup,
+        results: topResults,
+      });
+
+      await prisma.alertEvent.create({
+        data: {
+          userId: watch.userId,
+          watchRuleId: watch.id,
+          dedupeHash,
+          destination: topResults[0]?.destination,
+          payload: {
+            results: topResults,
+            messageId: emailResponse.id,
+          },
+        },
+      });
+
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("watch-alert-failure", {
+        watchId: watch.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return {
     watchesChecked: activeWatches.length,
     emailsSent: sent,
+    failedWatches: failed,
   };
 }
