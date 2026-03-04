@@ -42,6 +42,7 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 - Build cloud-first with Supabase/Postgres instead of local-first SQLite for this project.
 - Include a weekly Thursday email that highlights weekend-capable options.
 - Treat return feasibility as a first-class requirement: default search behavior should prioritize destinations that have a way back to the same origin metro.
+- Maintain `architecture.md` as a living system guide and update it every time code changes in this repository.
 
 ## Learned Implementation Rules
 - For this repository, pin Prisma to v6 unless the codebase is explicitly migrated to Prisma v7 with `prisma.config.ts` and updated datasource configuration.

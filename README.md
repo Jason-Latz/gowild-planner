@@ -2,6 +2,11 @@
 
 Supabase-first Next.js app for exploring Frontier itineraries with return-feasibility checks, saved watches, and a Thursday weekend digest.
 
+## Architecture Guide
+
+- Full architecture context for future agents lives in [architecture.md](/Users/jason/Downloads/CS Classes/Projects/GoWild_Planner/architecture.md).
+- Every code change must also update `architecture.md` (including change log entry).
+
 ## What It Implements
 
 - One-to-many search from an origin metro group (default `CHI = ORD + MDW`).
@@ -32,6 +37,7 @@ Required for full runtime:
 
 - `DATABASE_URL`
 - `CRON_SECRET`
+- `ALLOW_HEADER_AUTH` (defaults to false; enable only for trusted non-production workflows)
 - `RESEND_API_KEY` + `ALERT_FROM_EMAIL` (for real email)
 - Provider credentials (`PROVIDER_A_*`, optional `PROVIDER_B_*`)
 
@@ -61,6 +67,7 @@ npm run dev
 ```bash
 npm run lint
 npm run test
+npm run check:architecture
 ```
 
 ## Vercel Cron
