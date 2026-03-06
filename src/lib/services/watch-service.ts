@@ -6,7 +6,7 @@ import { DEFAULT_ORIGIN_GROUP } from "@/lib/constants";
 import { sendWatchAlertEmail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
 import { searchFlights } from "@/lib/services/search-service";
-import { getOrCreateUserByEmail } from "@/lib/services/user-service";
+import { getOrCreateUserByEmail, parseOriginCode } from "@/lib/services/user-service";
 import { tomorrowDateOnly } from "@/lib/utils/date";
 import { hashPayload } from "@/lib/utils/hash";
 
@@ -42,17 +42,26 @@ function deriveDepartDate(dateMode: DateMode, exactDate?: Date | null) {
 export async function createWatch(email: string, input: z.input<typeof watchInputSchema>) {
   const user = await getOrCreateUserByEmail(email);
   const data = watchInputSchema.parse(input);
+  const origin = parseOriginCode(data.originGroup);
 
   if (data.dateMode === DateMode.EXACT_DATE && !data.exactDate) {
     throw new ValidationError("exactDate is required for EXACT_DATE watches");
   }
+
+  if (origin.kind === "invalid") {
+    throw new ValidationError(
+      "originGroup must be a known metro code (for example CHI) or a 3-letter airport code (for example DEN)",
+    );
+  }
+
+  const normalizedOriginCode = origin.code;
 
   const exactDate = data.exactDate ? new Date(`${data.exactDate}T00:00:00.000Z`) : null;
 
   const existing = await prisma.watchRule.findFirst({
     where: {
       userId: user.id,
-      originGroup: data.originGroup,
+      originGroup: normalizedOriginCode,
       dateMode: data.dateMode,
       exactDate,
       maxStops: data.maxStops,
@@ -74,7 +83,7 @@ export async function createWatch(email: string, input: z.input<typeof watchInpu
   const watch = await prisma.watchRule.create({
     data: {
       userId: user.id,
-      originGroup: data.originGroup,
+      originGroup: normalizedOriginCode,
       dateMode: data.dateMode,
       exactDate,
       maxStops: data.maxStops,

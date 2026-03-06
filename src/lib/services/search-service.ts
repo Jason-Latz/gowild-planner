@@ -16,9 +16,11 @@ import type { Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/li
 import { hashPayload } from "@/lib/utils/hash";
 import { isValidDateOnly, parseDateOnly, toDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
 
+const SEARCH_QUERY_VERSION = 2;
+
 export const searchRequestSchema = z
   .object({
-    originGroup: z.string().trim().min(2).max(6).default(DEFAULT_ORIGIN_GROUP),
+    originGroup: z.string().trim().regex(/^[A-Za-z]{2,6}$/).default(DEFAULT_ORIGIN_GROUP),
     departDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -143,7 +145,10 @@ async function computeReturnCheck(args: {
 export async function searchFlights(input: SearchRequest): Promise<SearchResponse> {
   const request = searchRequestSchema.parse(input);
 
-  const queryHash = hashPayload(request);
+  const queryHash = hashPayload({
+    version: SEARCH_QUERY_VERSION,
+    request,
+  });
   const cachedSearch = await getCachedSearchResult(queryHash);
 
   if (cachedSearch) {

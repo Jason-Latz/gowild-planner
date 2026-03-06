@@ -46,3 +46,4 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 
 ## Learned Implementation Rules
 - For this repository, pin Prisma to v6 unless the codebase is explicitly migrated to Prisma v7 with `prisma.config.ts` and updated datasource configuration.
+- Origin parsing must never silently map unknown origin codes to Chicago defaults. Known metro codes use explicit mappings; other 3-letter codes are treated as direct airports.

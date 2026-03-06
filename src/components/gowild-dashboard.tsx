@@ -305,9 +305,10 @@ export function GoWildDashboard() {
                 />
               </label>
               <label className="text-sm">
-                Origin group
+                Origin (metro or airport code)
                 <input
                   className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2"
+                  placeholder="CHI or DEN"
                   value={search.originGroup}
                   onChange={(event) => setSearch((current) => ({ ...current, originGroup: event.target.value.toUpperCase() }))}
                 />

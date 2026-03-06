@@ -10,6 +10,7 @@ Supabase-first Next.js app for exploring Frontier itineraries with return-feasib
 ## What It Implements
 
 - One-to-many search from an origin metro group (default `CHI = ORD + MDW`).
+- Origin input supports either metro group codes (example `CHI`) or single airport codes (example `DEN`).
 - Direct, 1-stop, and 2-stop itinerary generation.
 - Return feasibility checks to the same origin metro (`requireReturn` defaults to `true`).
 - Saved watches with deduped alert emails.

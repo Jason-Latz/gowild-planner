@@ -55,7 +55,9 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 ### 1) Search Flow
 1. `GET /api/search` receives query params and validates with `searchRequestSchema`.
 2. `search-service` checks `search_results_cache` using a deterministic hash.
-3. On miss, `search-service` resolves origin airports from `origin_groups` + `origin_group_airports`.
+3. On miss, `search-service` resolves origin input as either:
+   - known metro group code (example `CHI`) -> airports from `origin_groups` + `origin_group_airports`
+   - generic 3-letter airport code (example `DEN`) -> direct single-airport origin
 4. For each queried airport/date, provider legs are loaded from cache or adapter failover (A->B).
 5. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, and scores itineraries.
 6. Return feasibility is computed across configured `minNights..maxNights`.
@@ -124,6 +126,12 @@ Current behavior:
 - In non-production mode, `x-user-email` header and demo fallback are supported.
 - In production, header auth is disabled unless `ALLOW_HEADER_AUTH=true`.
 - Production must not rely on header spoofing.
+
+### Origin Code Semantics
+- Known metro codes are explicit and mapped in `ORIGIN_GROUP_FALLBACKS`.
+- Any non-metro 3-letter code is treated as a direct airport.
+- Invalid origin codes are rejected with validation errors.
+- This prevents accidental fallback of arbitrary origin input to Chicago defaults.
 
 ### Rate Limiting
 - Search and mutating endpoints apply in-memory per-IP rate limits.
@@ -200,3 +208,4 @@ CI guard:
 |---|---|---|
 | 2026-03-04 | Created baseline architecture guide with mandatory update protocol and full system map. | `architecture.md` |
 | 2026-03-04 | Added API error contract + route rate limiting, hardened auth header behavior, enriched booking fallback metadata, improved operational/test coverage, and added CI guard for mandatory architecture updates. | `src/lib/api/*`, `src/app/api/*`, `src/lib/auth/user-context.ts`, `src/lib/services/*`, `src/components/gowild-dashboard.tsx`, `.github/workflows/architecture-guard.yml`, `scripts/check-architecture-update.sh`, `README.md` |
+| 2026-03-05 | Fixed origin parsing bug by treating non-metro 3-letter codes as direct airports (instead of Chicago fallback), and versioned search cache keys to avoid stale semantic cache reuse. | `src/lib/services/user-service.ts`, `src/lib/services/search-service.ts`, `src/lib/services/*.ts`, `src/components/gowild-dashboard.tsx`, `README.md` |

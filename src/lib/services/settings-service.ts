@@ -1,7 +1,7 @@
 import { THURSDAY } from "@/lib/constants";
 import { ValidationError } from "@/lib/api/errors";
 import { prisma } from "@/lib/prisma";
-import { getOrCreateUserByEmail } from "@/lib/services/user-service";
+import { getOrCreateUserByEmail, parseOriginCode } from "@/lib/services/user-service";
 
 export type SettingsInput = {
   timezone?: string;
@@ -67,6 +67,13 @@ export async function updateSettings(email: string, input: SettingsInput) {
     throw new ValidationError("Invalid timezone");
   }
 
+  const parsedOrigin = input.defaultOriginGroup ? parseOriginCode(input.defaultOriginGroup) : null;
+  if (parsedOrigin?.kind === "invalid") {
+    throw new ValidationError(
+      "defaultOriginGroup must be a known metro code (for example CHI) or a 3-letter airport code (for example DEN)",
+    );
+  }
+
   const user = await getOrCreateUserByEmail(email);
   const nights = normalizeNights(input.minNights, input.maxNights);
 
@@ -75,7 +82,7 @@ export async function updateSettings(email: string, input: SettingsInput) {
       where: { id: user.id },
       data: {
         timezone: input.timezone,
-        defaultOriginGroup: input.defaultOriginGroup?.toUpperCase(),
+        defaultOriginGroup: parsedOrigin?.code,
       },
     });
 
