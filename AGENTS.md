@@ -43,7 +43,9 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 - Include a weekly Thursday email that highlights weekend-capable options.
 - Treat return feasibility as a first-class requirement: default search behavior should prioritize destinations that have a way back to the same origin metro.
 - Maintain `architecture.md` as a living system guide and update it every time code changes in this repository.
+- Prefer a Vercel-friendly architecture when possible; avoid making production request paths depend on a local subprocess inside the Next.js app.
 
 ## Learned Implementation Rules
 - For this repository, pin Prisma to v6 unless the codebase is explicitly migrated to Prisma v7 with `prisma.config.ts` and updated datasource configuration.
 - Origin parsing must never silently map unknown origin codes to Chicago defaults. Known metro codes use explicit mappings; other 3-letter codes are treated as direct airports.
+- When using `fli` / Google Flights data, treat departure and arrival timestamps as local wall-clock times; compute itinerary duration from leg durations plus layovers instead of subtracting cross-timezone timestamps directly.

@@ -27,6 +27,7 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 - `API Layer`: Route handlers in `src/app/api/*`.
 - `Domain Services`: Search, itinerary graphing, watches, digest scheduling, and email dispatch.
 - `Provider Adapters`: Primary/secondary external data adapters with normalized output and failover.
+- `Fli Bridge`: Python bridge layer that wraps the `flights` package for Google Flights-backed Frontier route timing queries.
 - `Persistence`: Prisma models in Supabase Postgres.
 - `Scheduler`: Vercel cron calling `/api/digest/run` hourly.
 
@@ -48,6 +49,13 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 - `prisma/`:
   - `schema.prisma`: source of DB schema.
   - `seed.ts`: initial data seeding.
+- `scripts/`:
+  - `fli_search.py`: Python bridge used by the live `fli` provider.
+- `api/fli/`:
+  - `health.py`: Vercel Python function for `fli` health checks.
+  - `search.py`: Vercel Python function for per-route `fli` searches.
+- `fli_bridge.py`:
+  - shared Python search/health logic used by both CLI and Vercel Python functions.
 - `vercel.json`: scheduled cron definition.
 
 ## Request and Data Flows
@@ -58,10 +66,15 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 3. On miss, `search-service` resolves origin input as either:
    - known metro group code (example `CHI`) -> airports from `origin_groups` + `origin_group_airports`
    - generic 3-letter airport code (example `DEN`) -> direct single-airport origin
-4. For each queried airport/date, provider legs are loaded from cache or adapter failover (A->B).
-5. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, and scores itineraries.
-6. Return feasibility is computed across configured `minNights..maxNights`.
-7. Results are sorted, booking handoff URL is generated, and response is cached.
+4. For each queried airport/date, provider legs are loaded from cache or adapter failover (`provider-fli` -> A -> B).
+5. `provider-fli` resolves direct Frontier route candidates from Frontier's public `flights-from-*` pages.
+6. `provider-fli` then executes one of two transports:
+   - `http`: call Vercel Python functions at `/api/fli/*`
+   - `local`: shell out to `scripts/fli_search.py`
+7. The Python bridge uses `fli` / Google Flights-backed data for non-stop route timing data.
+8. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, and scores itineraries.
+9. Return feasibility is computed across configured `minNights..maxNights`.
+10. Results are sorted, booking handoff URL is generated, and response is cached.
 
 ### 2) Watches Flow
 1. User saves watch via `POST /api/watches`.
@@ -96,6 +109,7 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 - Then shorter total duration.
 - Then lower composite score (duration + layover penalty).
 - Then earlier departure tie-break.
+- `totalMinutes` must be derived from `sum(leg.durationMinutes) + sum(layovers)` rather than timestamp subtraction because `fli` returns local wall-clock datetimes without timezone offsets.
 
 ### Return Feasibility
 - Destination must have at least one valid return itinerary to any airport in origin metro group.
@@ -144,6 +158,7 @@ Current behavior:
   - `bookingUrl`
   - `bookingFallbackUrl`
   - `bookingDetailsText`
+- `FlightLeg`: normalized provider leg data including `durationMinutes`.
 - `DigestRunResult`: counts for `processedUsers`, `sentEmails`, `skippedUsers`, and `failedUsers`.
 
 ## Data Model (Prisma)
@@ -170,6 +185,7 @@ Key constraints:
 
 ### Health
 - `GET /api/health` checks DB query + provider health probes.
+- `provider-fli` health checks the active bridge transport and installed `flights` package, but does not probe every Frontier route page.
 
 ### Cron
 - `vercel.json` runs `/api/digest/run` hourly.
@@ -184,9 +200,18 @@ Key constraints:
 ## Development Workflow
 1. `npm install`
 2. `npm run prisma:generate`
-3. `npm run db:push`
-4. `npm run db:seed`
-5. `npm run dev`
+3. Install the Python `flights` package for live route discovery:
+   - Example: `python3 -m venv .fli-venv && .fli-venv/bin/pip install flights`
+   - Then set `FLI_PYTHON_BIN=.fli-venv/bin/python`
+4. `npm run db:push`
+5. `npm run db:seed`
+6. `npm run dev`
+
+### Vercel Runtime Notes
+- Vercel hosting should use HTTP bridge mode instead of local subprocess mode.
+- Python bridge endpoints live in `api/fli/*.py` and install dependencies from `requirements.txt`.
+- Set `FLI_HTTP_SECRET` in Vercel to protect direct access to the Python endpoints.
+- `provider-fli` auto-selects HTTP mode when `VERCEL_URL` is present, or when `FLI_HTTP_BASE_URL` is explicitly set.
 
 Validation checks:
 - `npm run lint`
@@ -202,6 +227,7 @@ CI guard:
 - Additional provider adapters.
 - Destination preference scoring (temperature, distance, novelty).
 - Better auth UX with explicit magic-link sign-in flow.
+- Replace the Python bridge entirely with a pure TypeScript or external hosted implementation if Vercel Python runtime constraints become a bottleneck.
 
 ## Architecture Change Log
 | Date (UTC) | Summary | Files |
@@ -209,3 +235,5 @@ CI guard:
 | 2026-03-04 | Created baseline architecture guide with mandatory update protocol and full system map. | `architecture.md` |
 | 2026-03-04 | Added API error contract + route rate limiting, hardened auth header behavior, enriched booking fallback metadata, improved operational/test coverage, and added CI guard for mandatory architecture updates. | `src/lib/api/*`, `src/app/api/*`, `src/lib/auth/user-context.ts`, `src/lib/services/*`, `src/components/gowild-dashboard.tsx`, `.github/workflows/architecture-guard.yml`, `scripts/check-architecture-update.sh`, `README.md` |
 | 2026-03-05 | Fixed origin parsing bug by treating non-metro 3-letter codes as direct airports (instead of Chicago fallback), and versioned search cache keys to avoid stale semantic cache reuse. | `src/lib/services/user-service.ts`, `src/lib/services/search-service.ts`, `src/lib/services/*.ts`, `src/components/gowild-dashboard.tsx`, `README.md` |
+| 2026-04-16 | Added a live `fli` provider bridge that discovers Frontier routes from public `flights-from-*` pages, shells out to a Python `flights` helper for non-stop timing data, and changed itinerary duration scoring to use `durationMinutes` plus layovers for timezone-safe calculations. | `src/lib/providers/*`, `scripts/fli_search.py`, `src/lib/services/itinerary-service.ts`, `src/lib/types/domain.ts`, `README.md`, `AGENTS.md` |
+| 2026-04-17 | Refactored the `fli` bridge to support Vercel-friendly HTTP transport via Python functions in `api/fli/*`, while keeping the local subprocess bridge for development and non-Vercel hosts. | `api/fli/*`, `fli_bridge.py`, `scripts/fli_search.py`, `src/lib/providers/provider-fli.ts`, `src/lib/env.ts`, `README.md`, `AGENTS.md` |
