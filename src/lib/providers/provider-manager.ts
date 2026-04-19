@@ -1,9 +1,12 @@
+import { differenceInMinutes } from "date-fns";
+
 import type { FlightLeg } from "@/lib/types/domain";
 import type { ProviderAdapter, ProviderQuery } from "@/lib/providers/types";
+import { FliAdapter } from "@/lib/providers/provider-fli";
 import { ProviderAAdapter } from "@/lib/providers/provider-a";
 import { ProviderBAdapter } from "@/lib/providers/provider-b";
 
-const adapters: ProviderAdapter[] = [new ProviderAAdapter(), new ProviderBAdapter()];
+const adapters: ProviderAdapter[] = [new FliAdapter(), new ProviderAAdapter(), new ProviderBAdapter()];
 
 type FetchResult = {
   providerId: string;
@@ -14,9 +17,17 @@ function normalizeLegs(legs: FlightLeg[]) {
   const unique = new Map<string, FlightLeg>();
 
   for (const leg of legs) {
-    const key = `${leg.carrier}-${leg.flightNo}-${leg.origin}-${leg.destination}-${leg.depTs}-${leg.arrTs}`;
+    const depTs = leg.depTs;
+    const arrTs = leg.arrTs;
+    const key = `${leg.carrier}-${leg.flightNo}-${leg.origin}-${leg.destination}-${depTs}-${arrTs}`;
     if (!unique.has(key)) {
-      unique.set(key, leg);
+      unique.set(key, {
+        ...leg,
+        depTs,
+        arrTs,
+        durationMinutes:
+          leg.durationMinutes ?? Math.max(0, differenceInMinutes(new Date(arrTs), new Date(depTs))),
+      });
     }
   }
 
