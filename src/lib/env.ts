@@ -15,6 +15,18 @@ const envSchema = z.object({
   PROVIDER_A_API_KEY: z.string().optional().or(z.literal("")),
   PROVIDER_B_BASE_URL: z.string().url().optional().or(z.literal("")),
   PROVIDER_B_API_KEY: z.string().optional().or(z.literal("")),
+  FLI_ENABLED: z
+    .union([z.string(), z.boolean()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined) {
+        return true;
+      }
+      return value === "true" || value === true;
+    }),
+  FLI_HTTP_BASE_URL: z.string().url().optional().or(z.literal("")),
+  FLI_HTTP_SECRET: z.string().optional().or(z.literal("")),
+  FLI_PYTHON_BIN: z.string().default("python3"),
   RESEND_API_KEY: z.string().optional().or(z.literal("")),
   ALERT_FROM_EMAIL: z.string().default("GoWild Explorer <alerts@example.com>"),
   CRON_SECRET: z.string().default("dev-secret"),
@@ -47,4 +59,12 @@ export function hasProviderAConfig() {
 
 export function hasProviderBConfig() {
   return Boolean(env.PROVIDER_B_BASE_URL && env.PROVIDER_B_API_KEY);
+}
+
+export function isFliEnabled() {
+  return env.FLI_ENABLED;
+}
+
+export function hasFliHttpBaseUrl() {
+  return Boolean(env.FLI_HTTP_BASE_URL);
 }
