@@ -16,7 +16,7 @@ import type { Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/li
 import { hashPayload } from "@/lib/utils/hash";
 import { isValidDateOnly, parseDateOnly, toDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
 
-const SEARCH_QUERY_VERSION = 2;
+const SEARCH_QUERY_VERSION = 3;
 
 export const searchRequestSchema = z
   .object({

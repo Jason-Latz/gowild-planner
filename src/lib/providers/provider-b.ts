@@ -1,4 +1,4 @@
-import { differenceInMilliseconds } from "date-fns";
+import { differenceInMilliseconds, differenceInMinutes } from "date-fns";
 
 import { env, hasProviderBConfig } from "@/lib/env";
 import { getMockFrontierDepartures } from "@/lib/providers/mock-data";
@@ -27,6 +27,7 @@ function parseFlight(record: Record<string, unknown>): FlightLeg | null {
     destination,
     depTs: new Date(depTs).toISOString(),
     arrTs: new Date(arrTs).toISOString(),
+    durationMinutes: differenceInMinutes(new Date(arrTs), new Date(depTs)),
     carrier,
     flightNo,
   };

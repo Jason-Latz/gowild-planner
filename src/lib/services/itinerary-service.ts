@@ -82,11 +82,11 @@ function buildLayovers(legs: FlightLeg[]): Layover[] {
 }
 
 export function scoreItinerary(legs: FlightLeg[]) {
-  const first = legs[0];
-  const last = legs[legs.length - 1];
-  const totalMinutes = differenceInMinutes(parseISO(last.arrTs), parseISO(first.depTs));
   const layovers = buildLayovers(legs);
   const stops = Math.max(0, legs.length - 1);
+  const totalMinutes =
+    legs.reduce((sum, leg) => sum + leg.durationMinutes, 0) +
+    layovers.reduce((sum, layover) => sum + layover.minutes, 0);
 
   const layoverPenalty = layovers.reduce((sum, layover) => {
     return sum + Math.abs(120 - layover.minutes);

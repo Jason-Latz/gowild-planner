@@ -20,6 +20,9 @@ function itinerary(args: {
         destination: args.destination,
         depTs: args.depTs,
         arrTs: args.arrTs,
+        durationMinutes: Math.round(
+          (new Date(args.arrTs).getTime() - new Date(args.depTs).getTime()) / 60_000,
+        ),
       },
     ],
     stops: 0,

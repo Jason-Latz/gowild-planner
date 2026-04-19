@@ -6,6 +6,7 @@ export type FlightLeg = {
   destination: string;
   depTs: string;
   arrTs: string;
+  durationMinutes: number;
 };
 
 export type Layover = {

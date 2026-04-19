@@ -18,6 +18,9 @@ function leg(args: {
     destination: args.destination,
     depTs: new Date(args.dep).toISOString(),
     arrTs: new Date(args.arr).toISOString(),
+    durationMinutes: Math.round(
+      (new Date(args.arr).getTime() - new Date(args.dep).getTime()) / 60_000,
+    ),
   };
 }
 

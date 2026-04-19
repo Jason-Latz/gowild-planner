@@ -47,6 +47,12 @@ function toIso(serviceDate: string, localTime: string) {
   return new Date(`${serviceDate}T${localTime}:00-06:00`).toISOString();
 }
 
+function getDurationMinutes(serviceDate: string, depLocal: string, arrLocal: string) {
+  const departure = new Date(`${serviceDate}T${depLocal}:00-06:00`);
+  const arrival = new Date(`${serviceDate}T${arrLocal}:00-06:00`);
+  return Math.round((arrival.getTime() - departure.getTime()) / 60_000);
+}
+
 export function getMockFrontierDepartures(airportCode: string, serviceDate: string): FlightLeg[] {
   return ROUTE_TEMPLATES.filter((template) => template.origin === airportCode).map((template) => ({
     providerId: "mock-frontier",
@@ -56,5 +62,6 @@ export function getMockFrontierDepartures(airportCode: string, serviceDate: stri
     destination: template.destination,
     depTs: toIso(serviceDate, template.depLocal),
     arrTs: toIso(serviceDate, template.arrLocal),
+    durationMinutes: getDurationMinutes(serviceDate, template.depLocal, template.arrLocal),
   }));
 }

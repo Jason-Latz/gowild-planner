@@ -14,6 +14,7 @@ function itinerary(score: number): Itinerary {
         destination: "DEN",
         depTs: "2026-03-05T10:00:00.000Z",
         arrTs: "2026-03-05T12:00:00.000Z",
+        durationMinutes: 120,
       },
     ],
     stops: 0,
