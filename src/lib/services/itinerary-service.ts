@@ -178,5 +178,7 @@ export async function buildItineraries(input: BuildItinerariesInput): Promise<It
     }
   }
 
+  // Callers rely on this best-first ordering so filtered subsets can reuse the
+  // first matching itinerary instead of re-sorting per destination/date.
   return sortItineraries(results);
 }

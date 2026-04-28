@@ -10,7 +10,7 @@ import {
   setCachedProviderLegs,
   setCachedSearchResult,
 } from "@/lib/services/cache-service";
-import { buildItineraries, sortItineraries } from "@/lib/services/itinerary-service";
+import { buildItineraries } from "@/lib/services/itinerary-service";
 import { getOriginGroupAirports } from "@/lib/services/user-service";
 import type { Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/lib/types/domain";
 import { hashPayload } from "@/lib/utils/hash";
@@ -86,7 +86,7 @@ function extractDestination(itinerary: Itinerary) {
 
 async function computeReturnCheck(args: {
   destination: string;
-  originAirports: string[];
+  originAirportSet: Set<string>;
   departDate: string;
   maxStops: number;
   minNights: number;
@@ -112,15 +112,10 @@ async function computeReturnCheck(args: {
       getDepartures: async (airportCode) => args.getDeparturesForDate(airportCode, returnDate),
     });
 
-    const validReturns = sortItineraries(
-      itineraries.filter((itinerary) => args.originAirports.includes(extractDestination(itinerary))),
-    );
-
-    if (validReturns.length === 0) {
+    const candidate = itineraries.find((itinerary) => args.originAirportSet.has(extractDestination(itinerary)));
+    if (!candidate) {
       continue;
     }
-
-    const candidate = validReturns[0];
 
     if (!bestReturn || candidate.score < bestReturn.score) {
       bestReturn = candidate;
@@ -156,6 +151,7 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
   }
 
   const originAirports = await getOriginGroupAirports(request.originGroup);
+  const originAirportSet = new Set(originAirports);
 
   const departuresMemo = new Map<string, Awaited<ReturnType<typeof fetchAirportDepartures>>>();
 
@@ -184,34 +180,27 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
     getDepartures: async (airportCode) => getDeparturesForDate(airportCode, request.departDate),
   });
 
-  const byDestination = new Map<string, Itinerary[]>();
+  const bestOutboundByDestination = new Map<string, Itinerary>();
 
   for (const itinerary of outboundItineraries) {
     const destination = extractDestination(itinerary);
 
-    if (!destination || originAirports.includes(destination)) {
+    if (!destination || originAirportSet.has(destination) || bestOutboundByDestination.has(destination)) {
       continue;
     }
 
-    const list = byDestination.get(destination) ?? [];
-    list.push(itinerary);
-    byDestination.set(destination, sortItineraries(list));
+    bestOutboundByDestination.set(destination, itinerary);
   }
 
   const returnMemo = new Map<string, ReturnCheck>();
   const results: SearchResponse["results"] = [];
 
-  for (const [destination, itineraries] of byDestination.entries()) {
-    const bestOutbound = itineraries[0];
-    if (!bestOutbound) {
-      continue;
-    }
-
+  for (const [destination, bestOutbound] of bestOutboundByDestination.entries()) {
     let returnCheck = returnMemo.get(destination);
     if (!returnCheck) {
       returnCheck = await computeReturnCheck({
         destination,
-        originAirports,
+        originAirportSet,
         departDate: request.departDate,
         maxStops: request.maxStops,
         minNights: request.minNights,

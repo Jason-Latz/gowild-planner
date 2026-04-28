@@ -120,4 +120,49 @@ describe("itinerary-service", () => {
 
     expect(direct.score).toBeLessThan(connection.score);
   });
+
+  it("returns itineraries in best-first order for a destination", async () => {
+    const departures: Record<string, FlightLeg[]> = {
+      ORD: [
+        leg({
+          flightNo: "301",
+          origin: "ORD",
+          destination: "DEN",
+          dep: "2026-03-05T08:00:00Z",
+          arr: "2026-03-05T10:00:00Z",
+        }),
+        leg({
+          flightNo: "302",
+          origin: "ORD",
+          destination: "MCO",
+          dep: "2026-03-05T08:30:00Z",
+          arr: "2026-03-05T11:30:00Z",
+        }),
+      ],
+      MCO: [
+        leg({
+          flightNo: "303",
+          origin: "MCO",
+          destination: "DEN",
+          dep: "2026-03-05T12:30:00Z",
+          arr: "2026-03-05T15:30:00Z",
+        }),
+      ],
+      DEN: [],
+    };
+
+    const itineraries = await buildItineraries({
+      originAirports: ["ORD"],
+      serviceDate: "2026-03-05",
+      maxStops: 2,
+      carrier: "F9",
+      getDepartures: async (airportCode) => departures[airportCode] ?? [],
+    });
+
+    const denTrips = itineraries.filter((itinerary) => itinerary.legs.at(-1)?.destination === "DEN");
+
+    expect(denTrips).toHaveLength(2);
+    expect(denTrips[0]?.stops).toBe(0);
+    expect(denTrips[1]?.stops).toBe(1);
+  });
 });
