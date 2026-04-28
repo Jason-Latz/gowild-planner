@@ -72,8 +72,8 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
    - `http`: call Vercel Python functions at `/api/fli/*`
    - `local`: shell out to `scripts/fli_search.py`
 7. The Python bridge uses `fli` / Google Flights-backed data for non-stop route timing data.
-8. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, and scores itineraries.
-9. Return feasibility is computed across configured `minNights..maxNights`.
+8. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, scores itineraries, and returns them in best-first order.
+9. `search-service` keeps only the first outbound seen for each destination and the first return match per date window, so it can reuse the pre-ranked itinerary order instead of re-sorting filtered subsets.
 10. Results are sorted, booking handoff URL is generated, and response is cached.
 
 ### 2) Watches Flow
@@ -237,3 +237,4 @@ CI guard:
 | 2026-03-05 | Fixed origin parsing bug by treating non-metro 3-letter codes as direct airports (instead of Chicago fallback), and versioned search cache keys to avoid stale semantic cache reuse. | `src/lib/services/user-service.ts`, `src/lib/services/search-service.ts`, `src/lib/services/*.ts`, `src/components/gowild-dashboard.tsx`, `README.md` |
 | 2026-04-16 | Added a live `fli` provider bridge that discovers Frontier routes from public `flights-from-*` pages, shells out to a Python `flights` helper for non-stop timing data, and changed itinerary duration scoring to use `durationMinutes` plus layovers for timezone-safe calculations. | `src/lib/providers/*`, `scripts/fli_search.py`, `src/lib/services/itinerary-service.ts`, `src/lib/types/domain.ts`, `README.md`, `AGENTS.md` |
 | 2026-04-17 | Refactored the `fli` bridge to support Vercel-friendly HTTP transport via Python functions in `api/fli/*`, while keeping the local subprocess bridge for development and non-Vercel hosts. | `api/fli/*`, `fli_bridge.py`, `scripts/fli_search.py`, `src/lib/providers/provider-fli.ts`, `src/lib/env.ts`, `README.md`, `AGENTS.md` |
+| 2026-04-28 | Removed repeated itinerary re-sorts in `search-service` by treating `buildItineraries()` output as a best-first stream and taking the first outbound/return match per destination window. | `src/lib/services/search-service.ts`, `src/lib/services/itinerary-service.ts`, `src/lib/services/itinerary-service.test.ts`, `architecture.md` |

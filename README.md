@@ -6,6 +6,7 @@ Supabase-first Next.js app for exploring Frontier itineraries with return-feasib
 
 - Full architecture context for future agents lives in [architecture.md](/Users/jason/Downloads/CS Classes/Projects/GoWild_Planner/architecture.md).
 - Every code change must also update `architecture.md` (including change log entry).
+- Search assembly now reuses the best-first ordering returned by `itinerary-service` so outbound and return filtering do not re-sort each destination subset.
 
 ## What It Implements
 
