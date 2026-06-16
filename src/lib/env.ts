@@ -31,7 +31,10 @@ const envSchema = z.object({
   ALERT_FROM_EMAIL: z.string().default("GoWild Explorer <alerts@example.com>"),
   CRON_SECRET: z.string().default("dev-secret"),
 }).superRefine((value, ctx) => {
-  if (value.NODE_ENV !== "production") {
+  // `next build` runs with NODE_ENV=production but without runtime secrets, so
+  // skip the strict checks during the build phase; they are enforced at runtime
+  // cold start instead (the env module re-parses when the function boots).
+  if (value.NODE_ENV !== "production" || process.env.NEXT_PHASE === "phase-production-build") {
     return;
   }
 
