@@ -38,8 +38,41 @@ Take GoWild Planner from its current branch tip to ship-ready: land the tip on `
 - Many small, narrowly-scoped commits. Each src/prisma/config commit carries an architecture.md Change Log row.
 - Keep solutions minimal; do not over-engineer.
 
+## Red-team findings (prioritized — from workflow whvcksen3, 51 findings + critique)
+Fix order P0 security → P1 correctness → P1 data-integrity → P2 trust → P3 hygiene. Each fix gets a guard test + arch Change Log row.
+
+**P0 security (ship-open, exploitable):**
+- [x] cron-auth: forgeable `x-vercel-cron:1` — secret-only timing-safe check (commit af8bb25).
+- [x] env CRON_SECRET default `'dev-secret'` + DATABASE_URL — prod superRefine fail-closed (commit af8bb25).
+- [x] header-auth impersonation — `allowHeaderAuth()` now requires explicit `ALLOW_HEADER_AUTH=true` (commit af8bb25).
+- [x] fli HTTP endpoints fail-open + departureDate crash + reflection — hardened, fail-closed on Vercel, membership lookup, generic errors, Python unittest guards (commit 3d94aee).
+
+**P1 correctness (timestamp canonicalization — THE headline bug):**
+- [x] timezone duration/layover: authoritative durationMinutes + wall-clock face-value layovers (commit ab63e84).
+- [x] `matchesServiceDate` UTC-roll drops evening flights — canonicalized mock (+provider-a/b) to naive local wall-clock (commit 836d6a6).
+- [x] booking-service getDateForFrontier server-tz date → face-value slice (commit 836d6a6).
+
+**P1 data-integrity:**
+- [x] digest + watch send-then-record duplicate-email race → claim-first (commit 53eab94).
+- [x] /api/digest/run maxDuration added (commit 53eab94). Rate-limit: decided NOT to per-IP-limit a secret-gated cron endpoint; /api/health gets the rate limit instead (P3).
+
+**P2 trust/observability:**
+- [ ] silent mock fallback: thread isMock → meta.dataSource 'live'|'mock' → dashboard banner + disable booking; provider health degraded marker; don't persist/serve mock legs in cache (skip or short TTL). (HIGH)
+- [ ] scraper: don't cache rejected promises (permanent negative cache); validate route slug regex + IATA guard (SSRF/path-injection); markup-brittleness logging. (MEDIUM)
+
+**P3 hygiene:**
+- [ ] env DATABASE_URL fail-open in prod → require in prod.
+- [ ] /api/health unauth+unrate-limited → add rate limit.
+- [ ] mailer HTML/attr escaping (latent injection).
+- [ ] watch exactDate isValidDateOnly + originGroup/settings regex parity with search.
+- [ ] search cache key omits resolved airports (stale on group reconfig) → include sorted airports.
+- [ ] dead code: clampDate, isSameDate, getDefaultDigestSendDay, DEFAULT_SEND_TIME; returnMemo; double carrier filter.
+- [ ] document per-instance rate limiter / module caches cold-start semantics; fli health TTL.
+
+**Re-scoped/dropped (per critique):** provider-a/b "cross-tz subtraction" CRITICALs are NOT defects for offset-bearing timestamps — already correctly handled (prefer authoritative field, keep offset-aware fallback). Do not over-fix.
+
 ## What's left
-Everything in Phases A–H (see checklist). Integrate red-team workflow findings when `whvcksen3` completes.
+Phases D (magic-link auth), E (more tests), F (final gates), G (deploy/GO-LIVE), H (LinkedIn post + finalize docs). Integrate remaining hygiene items opportunistically.
 
 ## How to verify
 Run all five gates after each milestone. Final: lint + `npx tsc --noEmit` + test + build + check:architecture all green on `main`.
