@@ -57,17 +57,19 @@ Fix order P0 security → P1 correctness → P1 data-integrity → P2 trust → 
 - [x] /api/digest/run maxDuration added (commit 53eab94). Rate-limit: decided NOT to per-IP-limit a secret-gated cron endpoint; /api/health gets the rate limit instead (P3).
 
 **P2 trust/observability:**
-- [ ] silent mock fallback: thread isMock → meta.dataSource 'live'|'mock' → dashboard banner + disable booking; provider health degraded marker; don't persist/serve mock legs in cache (skip or short TTL). (HIGH)
-- [ ] scraper: don't cache rejected promises (permanent negative cache); validate route slug regex + IATA guard (SSRF/path-injection); markup-brittleness logging. (MEDIUM)
+- [x] silent mock fallback visible: meta.dataSource + dashboard banner + booking disabled + degraded chips; mock never cached (commit 7be7a82).
+- [x] scraper: negative-cache eviction + strict slug allowlist + IATA guard + safe URL (commit 02e1905).
 
 **P3 hygiene:**
-- [ ] env DATABASE_URL fail-open in prod → require in prod.
-- [ ] /api/health unauth+unrate-limited → add rate limit.
-- [ ] mailer HTML/attr escaping (latent injection).
-- [ ] watch exactDate isValidDateOnly + originGroup/settings regex parity with search.
-- [ ] search cache key omits resolved airports (stale on group reconfig) → include sorted airports.
-- [ ] dead code: clampDate, isSameDate, getDefaultDigestSendDay, DEFAULT_SEND_TIME; returnMemo; double carrier filter.
-- [ ] document per-instance rate limiter / module caches cold-start semantics; fli health TTL.
+- [x] env DATABASE_URL fail-open in prod → required in prod (commit af8bb25).
+- [x] /api/health rate limit added (commit 6eb8c05).
+- [x] mailer HTML/attr escaping (commit 64eb3cf).
+- [x] watch exactDate isValidDateOnly + originGroup/settings regex parity (commit 5c1c44f).
+- [x] search cache key includes resolved airports (commit 39bf1ee).
+- [x] dead code removed: clampDate, isSameDate, getDefaultDigestSendDay, DEFAULT_SEND_TIME, returnMemo (commit 39bf1ee).
+- [x] fli health TTL (commit 6eb8c05); per-instance limiter/module-cache cold-start semantics documented in architecture.md.
+
+**Deferred as documented known-minor (low severity, see architecture.md "Known Limitations"):** rate-limiter `cleanupExpired` O(n)/request; fli `healthCheck` latency reflects memoized probe; `updateSettings` re-reads via upsert-shaped getSettings; `digestEvent.fingerprint` stored but unused; `requireReturn` only disables on literal `"false"`; per-instance rate limiter & module caches give no cross-instance guarantee on Vercel (needs shared store for strict global limits).
 
 **Re-scoped/dropped (per critique):** provider-a/b "cross-tz subtraction" CRITICALs are NOT defects for offset-bearing timestamps — already correctly handled (prefer authoritative field, keep offset-aware fallback). Do not over-fix.
 

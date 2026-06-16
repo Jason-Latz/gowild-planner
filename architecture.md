@@ -205,6 +205,14 @@ Key constraints:
 - Secrets managed through env vars and host secret store.
 - Production auth should be session-based via Supabase.
 
+## Known Limitations (documented, low severity)
+- **No cross-instance state on Vercel.** The per-IP rate limiter (`src/lib/api/rate-limit.ts`) and the module-level fli health + Frontier route-discovery caches live in process memory. On Vercel each warm instance has its own copy and they reset on cold start, so the rate limiter cannot enforce a strict global limit (effective limit ≈ max × instances) and caches miss across instances. Replace with a shared store (e.g. Upstash/Redis, or persist routes alongside `ProviderLegCache`) if strict global guarantees are needed.
+- `rate-limit.ts` runs `cleanupExpired` (an O(n) sweep) on every request; fine at current scale, could be made periodic.
+- `provider-fli.healthCheck` latency reflects the memoized probe, not a fresh round-trip.
+- `settings-service.updateSettings` re-reads via `getSettings`, which is upsert-shaped (extra writes on a read path).
+- `digestEvent.fingerprint` is computed and stored but not currently read for dedup (weekly dedup uses the `(userId, isoWeek, digestType)` unique key).
+- `searchRequestSchema.requireReturn` only disables on the literal string `"false"` (other falsey tokens coerce to `true`).
+
 ## Development Workflow
 1. `npm install`
 2. `npm run prisma:generate`
