@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/services/digest-service", () => ({
   runDigest: vi.fn(async () => ({ processedUsers: 1, sentEmails: 1, skippedUsers: 0, failedUsers: 0 })),
