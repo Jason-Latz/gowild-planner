@@ -165,4 +165,110 @@ describe("itinerary-service", () => {
     expect(denTrips[0]?.stops).toBe(0);
     expect(denTrips[1]?.stops).toBe(1);
   });
+
+  // Regression: fli returns local wall-clock datetimes with no timezone offset.
+  // Duration must come from the authoritative durationMinutes field, and layovers
+  // from same-airport wall-clock differences — never absolute-instant subtraction.
+  function tzLeg(args: {
+    flightNo: string;
+    origin: string;
+    destination: string;
+    depTs: string;
+    arrTs: string;
+    durationMinutes: number;
+  }): FlightLeg {
+    return {
+      providerId: "test",
+      carrier: "F9",
+      flightNo: args.flightNo,
+      origin: args.origin,
+      destination: args.destination,
+      depTs: args.depTs,
+      arrTs: args.arrTs,
+      durationMinutes: args.durationMinutes,
+    };
+  }
+
+  it("derives total duration from authoritative durationMinutes, not wall-clock subtraction", () => {
+    // ORD (Central) -> DEN (Mountain): 2h wall-clock face value but 3h real.
+    const itinerary = scoreItinerary([
+      tzLeg({
+        flightNo: "900",
+        origin: "ORD",
+        destination: "DEN",
+        depTs: "2026-04-16T06:25:00",
+        arrTs: "2026-04-16T08:25:00",
+        durationMinutes: 180,
+      }),
+    ]);
+
+    // A naive arr-dep subtraction would yield 120; the authoritative value is 180.
+    expect(itinerary.totalMinutes).toBe(180);
+  });
+
+  it("computes single-airport layovers from wall-clock face values across timezones", () => {
+    const itinerary = scoreItinerary([
+      tzLeg({
+        flightNo: "900",
+        origin: "ORD",
+        destination: "DEN",
+        depTs: "2026-04-16T06:25:00",
+        arrTs: "2026-04-16T08:25:00",
+        durationMinutes: 180,
+      }),
+      // DEN (Mountain) -> LAS (Pacific): connection wholly within DEN's timezone.
+      tzLeg({
+        flightNo: "901",
+        origin: "DEN",
+        destination: "LAS",
+        depTs: "2026-04-16T10:05:00",
+        arrTs: "2026-04-16T11:20:00",
+        durationMinutes: 135,
+      }),
+    ]);
+
+    expect(itinerary.layovers).toHaveLength(1);
+    expect(itinerary.layovers[0]).toEqual({ airport: "DEN", minutes: 100 });
+    // 180 (leg1) + 135 (leg2) + 100 (DEN layover wall-clock) = 415.
+    expect(itinerary.totalMinutes).toBe(415);
+  });
+
+  it("validates connections by wall-clock layover even when authoritative durations span timezones", async () => {
+    const departures: Record<string, FlightLeg[]> = {
+      ORD: [
+        tzLeg({
+          flightNo: "900",
+          origin: "ORD",
+          destination: "DEN",
+          depTs: "2026-04-16T06:25:00",
+          arrTs: "2026-04-16T08:25:00",
+          durationMinutes: 180,
+        }),
+      ],
+      DEN: [
+        tzLeg({
+          flightNo: "901",
+          origin: "DEN",
+          destination: "LAS",
+          depTs: "2026-04-16T10:05:00",
+          arrTs: "2026-04-16T11:20:00",
+          durationMinutes: 135,
+        }),
+      ],
+      LAS: [],
+    };
+
+    const itineraries = await buildItineraries({
+      originAirports: ["ORD"],
+      serviceDate: "2026-04-16",
+      maxStops: 2,
+      carrier: "F9",
+      getDepartures: async (airportCode) => departures[airportCode] ?? [],
+    });
+
+    const lasTrip = itineraries.find((itinerary) => itinerary.legs.at(-1)?.destination === "LAS");
+    expect(lasTrip).toBeDefined();
+    expect(lasTrip?.stops).toBe(1);
+    expect(lasTrip?.totalMinutes).toBe(415);
+  });
 });

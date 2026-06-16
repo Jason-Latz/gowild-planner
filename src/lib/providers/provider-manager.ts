@@ -1,10 +1,9 @@
-import { differenceInMinutes } from "date-fns";
-
 import type { FlightLeg } from "@/lib/types/domain";
 import type { ProviderAdapter, ProviderQuery } from "@/lib/providers/types";
 import { FliAdapter } from "@/lib/providers/provider-fli";
 import { ProviderAAdapter } from "@/lib/providers/provider-a";
 import { ProviderBAdapter } from "@/lib/providers/provider-b";
+import { wallClockDiffMinutes } from "@/lib/utils/date";
 
 const adapters: ProviderAdapter[] = [new FliAdapter(), new ProviderAAdapter(), new ProviderBAdapter()];
 
@@ -25,8 +24,13 @@ function normalizeLegs(legs: FlightLeg[]) {
         ...leg,
         depTs,
         arrTs,
+        // Trust the provider's authoritative duration. Only fall back to a
+        // wall-clock face-value estimate when it is missing/invalid; never an
+        // absolute-instant subtraction, which is wrong across timezones.
         durationMinutes:
-          leg.durationMinutes ?? Math.max(0, differenceInMinutes(new Date(arrTs), new Date(depTs))),
+          Number.isFinite(leg.durationMinutes) && leg.durationMinutes > 0
+            ? leg.durationMinutes
+            : Math.max(0, wallClockDiffMinutes(depTs, arrTs)),
       });
     }
   }

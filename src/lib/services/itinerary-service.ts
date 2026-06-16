@@ -1,5 +1,3 @@
-import { differenceInMinutes, isSameDay, parseISO } from "date-fns";
-
 import {
   MAX_LAYOVER_MINUTES,
   MAX_OVERNIGHT_LAYOVER_MINUTES,
@@ -8,6 +6,7 @@ import {
   US_AIRPORTS,
 } from "@/lib/constants";
 import type { FlightLeg, Itinerary, Layover } from "@/lib/types/domain";
+import { wallClockDiffMinutes } from "@/lib/utils/date";
 
 type BuildItinerariesInput = {
   originAirports: string[];
@@ -45,11 +44,12 @@ function isValidConnection(previous: FlightLeg, next: FlightLeg) {
     return false;
   }
 
-  const previousArrival = parseISO(previous.arrTs);
-  const nextDeparture = parseISO(next.depTs);
-
-  const layoverMinutes = differenceInMinutes(nextDeparture, previousArrival);
-  if (layoverMinutes < 0) {
+  // The layover happens at a single airport (previous.destination === next.origin),
+  // so the correct elapsed time is the wall-clock difference of the two local
+  // face values there — never an absolute-instant subtraction, which is wrong
+  // when legs span timezones (fli returns local wall-clock without an offset).
+  const layoverMinutes = wallClockDiffMinutes(previous.arrTs, next.depTs);
+  if (Number.isNaN(layoverMinutes) || layoverMinutes < 0) {
     return false;
   }
 
@@ -57,7 +57,8 @@ function isValidConnection(previous: FlightLeg, next: FlightLeg) {
     return false;
   }
 
-  if (!isSameDay(previousArrival, nextDeparture) && layoverMinutes > MAX_OVERNIGHT_LAYOVER_MINUTES) {
+  const sameDay = toDateOnlyFromIso(previous.arrTs) === toDateOnlyFromIso(next.depTs);
+  if (!sameDay && layoverMinutes > MAX_OVERNIGHT_LAYOVER_MINUTES) {
     return false;
   }
 
@@ -71,7 +72,7 @@ function buildLayovers(legs: FlightLeg[]): Layover[] {
     const current = legs[index];
     const next = legs[index + 1];
 
-    const minutes = differenceInMinutes(parseISO(next.depTs), parseISO(current.arrTs));
+    const minutes = wallClockDiffMinutes(current.arrTs, next.depTs);
     layovers.push({
       airport: current.destination,
       minutes,

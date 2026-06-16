@@ -50,6 +50,39 @@ export function isSameDate(a: string, b: string) {
   return toDateOnly(parseISO(a)) === toDateOnly(parseISO(b));
 }
 
+const WALL_CLOCK_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/;
+
+/**
+ * Returns the wall-clock face value of an ISO-like timestamp as whole minutes,
+ * ignoring any timezone offset or trailing `Z`.
+ *
+ * fli (Google Flights) returns local wall-clock datetimes WITHOUT a timezone
+ * offset, so absolute-instant subtraction across legs is meaningless. Reading
+ * only the Y-M-D h:m fields makes this format-agnostic: "2026-04-16T08:25",
+ * "2026-04-16T08:25:00", "2026-04-16T08:25:00.000Z" and "...-06:00" all yield
+ * the same face value.
+ */
+export function wallClockEpochMinutes(ts: string): number {
+  const match = WALL_CLOCK_PATTERN.exec(ts);
+  if (!match) {
+    return Number.NaN;
+  }
+  const [, year, month, day, hour, minute] = match;
+  return Math.round(
+    Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)) / 60_000,
+  );
+}
+
+/**
+ * Wall-clock minutes elapsed from `fromTs` to `toTs`. Correct for layovers,
+ * which always occur at a single airport, where both timestamps share the same
+ * local timezone. Never use this to span a flight leg across timezones — use
+ * the provider's authoritative `durationMinutes` for that.
+ */
+export function wallClockDiffMinutes(fromTs: string, toTs: string): number {
+  return wallClockEpochMinutes(toTs) - wallClockEpochMinutes(fromTs);
+}
+
 export function parseTimeOfDay(value: string) {
   const parsed = parse(value, "HH:mm", new Date());
   if (Number.isNaN(parsed.getTime())) {

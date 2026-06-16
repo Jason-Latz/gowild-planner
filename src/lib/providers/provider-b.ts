@@ -21,13 +21,23 @@ function parseFlight(record: Record<string, unknown>): FlightLeg | null {
     return null;
   }
 
+  // Prefer the provider's authoritative duration; only fall back to an
+  // offset-aware instant subtraction when the field is absent.
+  const reportedDuration = Number(
+    record.durationMinutes ?? record.duration_minutes ?? record.duration ?? Number.NaN,
+  );
+  const durationMinutes =
+    Number.isFinite(reportedDuration) && reportedDuration > 0
+      ? Math.round(reportedDuration)
+      : differenceInMinutes(new Date(arrTs), new Date(depTs));
+
   return {
     providerId: "provider-b",
     origin,
     destination,
     depTs: new Date(depTs).toISOString(),
     arrTs: new Date(arrTs).toISOString(),
-    durationMinutes: differenceInMinutes(new Date(arrTs), new Date(depTs)),
+    durationMinutes,
     carrier,
     flightNo,
   };
