@@ -30,7 +30,8 @@ type FliHealthResponse = {
 
 type FliTransport = "http" | "local";
 
-let healthPromise: Promise<{ ok: boolean; message: string }> | null = null;
+let healthCache: { at: number; value: Promise<{ ok: boolean; message: string }> } | null = null;
+const HEALTH_CACHE_TTL_MS = 60_000;
 
 function isVercelRuntime() {
   return process.env.VERCEL === "1" || Boolean(process.env.VERCEL_URL);
@@ -156,11 +157,14 @@ async function runHelper(args: string[]) {
 }
 
 async function getFliHealth() {
-  if (healthPromise) {
-    return healthPromise;
+  // Cache the probe with a short TTL instead of forever: a transient failure on
+  // a warm instance must not permanently pin ok:false (or a stale ok:true).
+  const now = Date.now();
+  if (healthCache && now - healthCache.at < HEALTH_CACHE_TTL_MS) {
+    return healthCache.value;
   }
 
-  healthPromise = runHelper(["health"])
+  const value = runHelper(["health"])
     .then(({ stdout }) => {
       const payload = JSON.parse(stdout) as FliHealthResponse;
       return {
@@ -175,7 +179,8 @@ async function getFliHealth() {
       };
     });
 
-  return healthPromise;
+  healthCache = { at: now, value };
+  return value;
 }
 
 async function mapWithConcurrency<T, R>(
