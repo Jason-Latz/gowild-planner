@@ -93,8 +93,7 @@ export class ProviderAAdapter implements ProviderAdapter {
       );
     }
 
-    const flights = await fetchRemote(query);
-    return flights;
+    return fetchRemote(query);
   }
 
   async healthCheck() {

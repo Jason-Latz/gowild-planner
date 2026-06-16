@@ -1,17 +1,5 @@
-import {
-  addDays,
-  isValid,
-  format,
-  getISOWeek,
-  isAfter,
-  isBefore,
-  parse,
-  parseISO,
-  startOfDay,
-} from "date-fns";
+import { addDays, isValid, format, getISOWeek, parse, startOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-
-import { THURSDAY } from "@/lib/constants";
 
 export function toDateOnly(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -30,24 +18,10 @@ export function tomorrowDateOnly(base = new Date()): string {
   return toDateOnly(addDays(startOfDay(base), 1));
 }
 
-export function clampDate(date: Date, start: Date, end: Date) {
-  if (isBefore(date, start)) {
-    return start;
-  }
-  if (isAfter(date, end)) {
-    return end;
-  }
-  return date;
-}
-
 export function getIsoWeekKey(date: Date) {
   const year = format(date, "RRRR");
   const week = String(getISOWeek(date)).padStart(2, "0");
   return `${year}-W${week}`;
-}
-
-export function isSameDate(a: string, b: string) {
-  return toDateOnly(parseISO(a)) === toDateOnly(parseISO(b));
 }
 
 const WALL_CLOCK_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/;
@@ -124,8 +98,4 @@ export function getUpcomingWeekendDepartures(base: Date, timezone: string): stri
   const saturday = addDays(friday, 1);
 
   return [toDateOnly(friday), toDateOnly(saturday)];
-}
-
-export function getDefaultDigestSendDay() {
-  return THURSDAY;
 }

@@ -151,18 +151,23 @@ async function computeReturnCheck(args: {
 export async function searchFlights(input: SearchRequest): Promise<SearchResponse> {
   const request = searchRequestSchema.parse(input);
 
+  // Resolve the origin group to its airport set BEFORE hashing, and include the
+  // sorted airports in the cache key. The originGroup code alone is insufficient:
+  // if a group's airport membership is reconfigured, the old code would keep
+  // serving stale cached results for the TTL.
+  const originAirports = await getOriginGroupAirports(request.originGroup);
+  const originAirportSet = new Set(originAirports);
+
   const queryHash = hashPayload({
     version: SEARCH_QUERY_VERSION,
     request,
+    airports: [...originAirports].sort(),
   });
   const cachedSearch = await getCachedSearchResult(queryHash);
 
   if (cachedSearch) {
     return cachedSearch;
   }
-
-  const originAirports = await getOriginGroupAirports(request.originGroup);
-  const originAirportSet = new Set(originAirports);
 
   const departuresMemo = new Map<string, FlightLeg[]>();
   let usedMockData = false;
@@ -208,23 +213,19 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
     bestOutboundByDestination.set(destination, itinerary);
   }
 
-  const returnMemo = new Map<string, ReturnCheck>();
   const results: SearchResponse["results"] = [];
 
   for (const [destination, bestOutbound] of bestOutboundByDestination.entries()) {
-    let returnCheck = returnMemo.get(destination);
-    if (!returnCheck) {
-      returnCheck = await computeReturnCheck({
-        destination,
-        originAirportSet,
-        departDate: request.departDate,
-        maxStops: request.maxStops,
-        minNights: request.minNights,
-        maxNights: request.maxNights,
-        getDeparturesForDate,
-      });
-      returnMemo.set(destination, returnCheck);
-    }
+    // Each destination is visited once (keys are unique), so no memo is needed.
+    const returnCheck = await computeReturnCheck({
+      destination,
+      originAirportSet,
+      departDate: request.departDate,
+      maxStops: request.maxStops,
+      minNights: request.minNights,
+      maxNights: request.maxNights,
+      getDeparturesForDate,
+    });
 
     if (request.requireReturn && !returnCheck.feasible) {
       continue;

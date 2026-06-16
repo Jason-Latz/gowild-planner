@@ -22,7 +22,6 @@ export const MAX_LAYOVER_MINUTES = 360;
 export const MAX_OVERNIGHT_LAYOVER_MINUTES = 480;
 
 export const THURSDAY = 4;
-export const DEFAULT_SEND_TIME = "08:00";
 
 export const FRONTIER_BOOKING_BASE = "https://booking.flyfrontier.com";
 
