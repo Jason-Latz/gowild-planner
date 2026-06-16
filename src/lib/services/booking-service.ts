@@ -1,5 +1,3 @@
-import { format } from "date-fns";
-
 import { FRONTIER_BOOKING_BASE } from "@/lib/constants";
 import type { Itinerary } from "@/lib/types/domain";
 
@@ -10,7 +8,10 @@ export type BookingLinkResult = {
 };
 
 function getDateForFrontier(iso: string) {
-  return format(new Date(iso), "yyyy-MM-dd");
+  // Use the wall-clock face value (the local departure date) so the booking date
+  // is deterministic regardless of server timezone. Leg timestamps are local
+  // wall-clock and must not be reinterpreted as an absolute instant here.
+  return iso.slice(0, 10);
 }
 
 export function buildBookingLink(params: {

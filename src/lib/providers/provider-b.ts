@@ -35,8 +35,11 @@ function parseFlight(record: Record<string, unknown>): FlightLeg | null {
     providerId: "provider-b",
     origin,
     destination,
-    depTs: new Date(depTs).toISOString(),
-    arrTs: new Date(arrTs).toISOString(),
+    // Preserve the provider's wall-clock timestamps as-is rather than forcing
+    // UTC: matchesServiceDate and local-time display read the date/time face
+    // value, and a UTC conversion can roll an evening departure to the wrong day.
+    depTs,
+    arrTs,
     durationMinutes,
     carrier,
     flightNo,

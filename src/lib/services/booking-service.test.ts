@@ -63,4 +63,21 @@ describe("booking-service", () => {
     expect(link.detailsText).toContain("Outbound:");
     expect(link.detailsText).toContain("Return:");
   });
+
+  it("uses the local wall-clock departure date deterministically (regression: server-tz date)", () => {
+    // 18:50 local on 2026-04-16 with a naive timestamp. A server-tz format() of
+    // a UTC instant could land on 2026-04-17; the face-value date must not.
+    const outbound = itinerary({
+      origin: "DEN",
+      destination: "MCO",
+      depTs: "2026-04-16T18:50:00",
+      arrTs: "2026-04-16T23:45:00",
+      flightNo: "1801",
+    });
+
+    const link = buildBookingLink({ outbound });
+
+    expect(link.bookingUrl).toContain("departure=2026-04-16");
+    expect(link.detailsText).toContain("on 2026-04-16");
+  });
 });

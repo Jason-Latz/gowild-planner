@@ -43,14 +43,17 @@ const ROUTE_TEMPLATES: Template[] = [
   { flightNo: "1802", origin: "MCO", destination: "DEN", depLocal: "06:50", arrLocal: "09:10" },
 ];
 
-function toIso(serviceDate: string, localTime: string) {
-  return new Date(`${serviceDate}T${localTime}:00-06:00`).toISOString();
+function toLocalIso(serviceDate: string, localTime: string) {
+  // Naive local wall-clock with no timezone offset — matches the fli contract so
+  // date-only logic (matchesServiceDate) and local-time display stay correct and
+  // never roll an evening departure past UTC midnight onto the wrong service date.
+  return `${serviceDate}T${localTime}:00`;
 }
 
-function getDurationMinutes(serviceDate: string, depLocal: string, arrLocal: string) {
-  const departure = new Date(`${serviceDate}T${depLocal}:00-06:00`);
-  const arrival = new Date(`${serviceDate}T${arrLocal}:00-06:00`);
-  return Math.round((arrival.getTime() - departure.getTime()) / 60_000);
+function getDurationMinutes(depLocal: string, arrLocal: string) {
+  const [depHour, depMinute] = depLocal.split(":").map(Number);
+  const [arrHour, arrMinute] = arrLocal.split(":").map(Number);
+  return arrHour * 60 + arrMinute - (depHour * 60 + depMinute);
 }
 
 export function getMockFrontierDepartures(airportCode: string, serviceDate: string): FlightLeg[] {
@@ -60,8 +63,8 @@ export function getMockFrontierDepartures(airportCode: string, serviceDate: stri
     flightNo: template.flightNo,
     origin: template.origin,
     destination: template.destination,
-    depTs: toIso(serviceDate, template.depLocal),
-    arrTs: toIso(serviceDate, template.arrLocal),
-    durationMinutes: getDurationMinutes(serviceDate, template.depLocal, template.arrLocal),
+    depTs: toLocalIso(serviceDate, template.depLocal),
+    arrTs: toLocalIso(serviceDate, template.arrLocal),
+    durationMinutes: getDurationMinutes(template.depLocal, template.arrLocal),
   }));
 }
