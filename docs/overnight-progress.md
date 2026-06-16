@@ -81,7 +81,7 @@ All autonomous work is complete and verified. Remaining items are Jason's calls 
 - Pick/post a LinkedIn draft from `docs/launch/linkedin-post.md`.
 
 ## Final state (2026-06-16)
-- Branch: local `main`, 24+ small commits ahead of `origin/main`, fast-forwarded from the optimize tip.
+- Branch: local `main`, ~22 small commits ahead of `origin/main`, fast-forwarded from the optimize tip.
 - Gates: lint clean, `npx tsc --noEmit` clean, 62 JS tests + 8 Python tests pass, `npm run build` passes, `npm run check:architecture` passes.
 - Booking remains manual on Frontier (product invariant upheld). No prod promote / secret rotation / push done autonomously.
 
