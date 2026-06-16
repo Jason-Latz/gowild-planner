@@ -97,6 +97,7 @@ export class ProviderBAdapter implements ProviderAdapter {
           id: this.id,
           ok: true,
           latencyMs: 0,
+          degraded: true,
           message: "Using built-in mock schedule fallback.",
         };
       }

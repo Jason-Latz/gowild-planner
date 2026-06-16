@@ -12,11 +12,19 @@ import {
 } from "@/lib/services/cache-service";
 import { buildItineraries } from "@/lib/services/itinerary-service";
 import { getOriginGroupAirports } from "@/lib/services/user-service";
-import type { Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/lib/types/domain";
+import type { FlightLeg, Itinerary, ReturnCheck, SearchRequest, SearchResponse } from "@/lib/types/domain";
 import { hashPayload } from "@/lib/utils/hash";
 import { isValidDateOnly, parseDateOnly, toDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
 
-const SEARCH_QUERY_VERSION = 3;
+// Bumped to 4 when meta.dataSource was added so older cached payloads (which
+// lack it) are not served.
+const SEARCH_QUERY_VERSION = 4;
+
+const MOCK_PROVIDER_ID = "mock-frontier";
+
+function legsAreMock(legs: FlightLeg[]) {
+  return legs.length > 0 && legs.some((leg) => leg.providerId === MOCK_PROVIDER_ID);
+}
 
 export const searchRequestSchema = z
   .object({
@@ -57,10 +65,10 @@ async function fetchAirportDepartures(args: {
   airportCode: string;
   serviceDate: string;
   carrier: string;
-}) {
+}): Promise<{ legs: FlightLeg[]; isMock: boolean }> {
   const cached = await getCachedProviderLegs(args);
   if (cached) {
-    return cached.legs;
+    return { legs: cached.legs, isMock: legsAreMock(cached.legs) };
   }
 
   const response = await fetchDeparturesWithFailover({
@@ -69,15 +77,21 @@ async function fetchAirportDepartures(args: {
     carrier: args.carrier,
   });
 
-  await setCachedProviderLegs({
-    provider: response.providerId,
-    airportCode: args.airportCode,
-    serviceDate: args.serviceDate,
-    carrier: args.carrier,
-    legs: response.legs,
-  });
+  const isMock = legsAreMock(response.legs);
 
-  return response.legs;
+  // Never cache mock fallback legs: doing so would pin fabricated data into the
+  // DB cache and keep serving it even after a live provider recovers.
+  if (!isMock) {
+    await setCachedProviderLegs({
+      provider: response.providerId,
+      airportCode: args.airportCode,
+      serviceDate: args.serviceDate,
+      carrier: args.carrier,
+      legs: response.legs,
+    });
+  }
+
+  return { legs: response.legs, isMock };
 }
 
 function extractDestination(itinerary: Itinerary) {
@@ -91,10 +105,7 @@ async function computeReturnCheck(args: {
   maxStops: number;
   minNights: number;
   maxNights: number;
-  getDeparturesForDate: (
-    airportCode: string,
-    serviceDate: string,
-  ) => Promise<Awaited<ReturnType<typeof fetchAirportDepartures>>>;
+  getDeparturesForDate: (airportCode: string, serviceDate: string) => Promise<FlightLeg[]>;
 }): Promise<ReturnCheck> {
   let bestReturn: Itinerary | undefined;
   let bestReturnDate: string | undefined;
@@ -153,7 +164,8 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
   const originAirports = await getOriginGroupAirports(request.originGroup);
   const originAirportSet = new Set(originAirports);
 
-  const departuresMemo = new Map<string, Awaited<ReturnType<typeof fetchAirportDepartures>>>();
+  const departuresMemo = new Map<string, FlightLeg[]>();
+  let usedMockData = false;
 
   const getDeparturesForDate = async (airportCode: string, serviceDate: string) => {
     const key = `${airportCode}-${serviceDate}`;
@@ -162,14 +174,18 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
       return existing;
     }
 
-    const departures = await fetchAirportDepartures({
+    const { legs, isMock } = await fetchAirportDepartures({
       airportCode,
       serviceDate,
       carrier: DEFAULT_CARRIER,
     });
 
-    departuresMemo.set(key, departures);
-    return departures;
+    if (isMock) {
+      usedMockData = true;
+    }
+
+    departuresMemo.set(key, legs);
+    return legs;
   };
 
   const outboundItineraries = await buildItineraries({
@@ -249,19 +265,24 @@ export async function searchFlights(input: SearchRequest): Promise<SearchRespons
       maxNights: request.maxNights,
       generatedAt: new Date().toISOString(),
       source: "fresh",
+      dataSource: usedMockData ? "mock" : "live",
     },
     results,
   };
 
-  await setCachedSearchResult({
-    queryHash,
-    originGroup: request.originGroup,
-    departDate: request.departDate,
-    requireReturn: request.requireReturn,
-    minNights: request.minNights,
-    maxNights: request.maxNights,
-    payload: freshResult,
-  });
+  // Don't cache degraded (mock) results: every request should re-attempt live
+  // data so a recovered provider is picked up immediately.
+  if (!usedMockData) {
+    await setCachedSearchResult({
+      queryHash,
+      originGroup: request.originGroup,
+      departDate: request.departDate,
+      requireReturn: request.requireReturn,
+      minNights: request.minNights,
+      maxNights: request.maxNights,
+      payload: freshResult,
+    });
+  }
 
   return freshResult;
 }

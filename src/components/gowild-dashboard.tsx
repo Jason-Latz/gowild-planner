@@ -47,7 +47,7 @@ type SearchState = {
 type HealthState = {
   ok: boolean;
   db: { ok: boolean };
-  providers: Array<{ id: string; ok: boolean; message?: string }>;
+  providers: Array<{ id: string; ok: boolean; message?: string; degraded?: boolean }>;
 };
 
 function formatMinutes(minutes: number) {
@@ -82,6 +82,7 @@ export function GoWildDashboard() {
 
   const [results, setResults] = useState<SearchResult[]>([]);
   const [metaSource, setMetaSource] = useState<"cache" | "fresh" | null>(null);
+  const [dataSource, setDataSource] = useState<"live" | "mock" | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [watches, setWatches] = useState<Watch[]>([]);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
@@ -164,6 +165,7 @@ export function GoWildDashboard() {
 
       setResults(payload.results);
       setMetaSource(payload.meta.source);
+      setDataSource(payload.meta.dataSource ?? null);
       setStatus(`Found ${payload.results.length} return-aware destination(s).`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Search failed");
@@ -282,10 +284,15 @@ export function GoWildDashboard() {
                 <span
                   key={provider.id}
                   className={`rounded-full px-3 py-1 font-semibold ${
-                    provider.ok ? "bg-sky-100 text-sky-900" : "bg-amber-100 text-amber-900"
+                    !provider.ok
+                      ? "bg-rose-100 text-rose-900"
+                      : provider.degraded
+                        ? "bg-amber-100 text-amber-900"
+                        : "bg-sky-100 text-sky-900"
                   }`}
                 >
-                  {provider.id}: {provider.ok ? "ok" : provider.message || "degraded"}
+                  {provider.id}:{" "}
+                  {!provider.ok ? provider.message || "down" : provider.degraded ? "sample data" : "ok"}
                 </span>
               ))}
             </div>
@@ -554,6 +561,16 @@ export function GoWildDashboard() {
 
         <section className="rounded-3xl border border-stone-900/10 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold">Results</h2>
+          {dataSource === "mock" ? (
+            <div
+              role="status"
+              className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
+              <strong>Live flight data unavailable — showing sample data.</strong> These routes and
+              times are illustrative placeholders, not real Frontier availability. Booking is
+              disabled until live data is restored.
+            </div>
+          ) : null}
           {results.length === 0 ? (
             <p className="mt-2 text-sm text-stone-500">Run a search to see destinations.</p>
           ) : (
@@ -605,22 +622,34 @@ export function GoWildDashboard() {
                   ) : null}
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <a
-                      className="inline-flex rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-700"
-                      href={result.bookingUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Book on Frontier
-                    </a>
-                    <a
-                      className="inline-flex rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-                      href={result.bookingFallbackUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open fallback page
-                    </a>
+                    {dataSource === "mock" ? (
+                      <span
+                        className="inline-flex cursor-not-allowed rounded-xl bg-stone-200 px-3 py-2 text-sm font-medium text-stone-500"
+                        aria-disabled="true"
+                        title="Booking is disabled while showing sample data"
+                      >
+                        Booking unavailable (sample data)
+                      </span>
+                    ) : (
+                      <>
+                        <a
+                          className="inline-flex rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-700"
+                          href={result.bookingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Book on Frontier
+                        </a>
+                        <a
+                          className="inline-flex rounded-xl border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                          href={result.bookingFallbackUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open fallback page
+                        </a>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => copyBookingDetails(result)}

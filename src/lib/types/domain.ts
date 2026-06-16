@@ -57,6 +57,10 @@ export type SearchResponse = {
     maxNights: number;
     generatedAt: string;
     source: "cache" | "fresh";
+    // Provenance of the underlying flight data, distinct from the cache tier:
+    // "live" = real provider/fli data; "mock" = built-in sample schedule served
+    // because live providers were unavailable (results are illustrative only).
+    dataSource: "live" | "mock";
   };
   results: SearchResultCard[];
 };
@@ -66,6 +70,9 @@ export type ProviderHealth = {
   ok: boolean;
   latencyMs: number;
   message?: string;
+  // True when the adapter is reachable but serving the built-in mock schedule
+  // (no live credentials), so callers can surface a degraded/"sample data" state.
+  degraded?: boolean;
 };
 
 export type DigestTrip = {

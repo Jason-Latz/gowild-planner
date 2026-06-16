@@ -75,6 +75,7 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 8. `itinerary-service` enumerates paths up to 2 stops, applies layover/loop constraints, scores itineraries, and returns them in best-first order.
 9. `search-service` keeps only the first outbound seen for each destination and the first return match per date window, so it can reuse the pre-ranked itinerary order instead of re-sorting filtered subsets.
 10. Results are sorted, booking handoff URL is generated, and response is cached.
+11. **Data-source provenance**: if any leg used in the response came from the built-in mock schedule (`providerId === "mock-frontier"`, i.e. live providers were unavailable), `meta.dataSource` is set to `"mock"` (otherwise `"live"`). Mock legs are never written to `ProviderLegCache` and a mock-sourced response is never written to `SearchResultsCache`, so a recovered live provider is picked up on the next request instead of serving cached fabricated data.
 
 ### 2) Watches Flow
 1. User saves watch via `POST /api/watches`.
@@ -158,7 +159,7 @@ Current behavior:
 - If deployed to multiple instances, replace with shared-store rate limiting for strict global guarantees.
 
 ### Output Shapes (selected)
-- `SearchResponse`: metadata + array of destination cards.
+- `SearchResponse`: metadata + array of destination cards. `meta.source` is the cache tier (`cache`/`fresh`); `meta.dataSource` is the data provenance (`live`/`mock`) — the dashboard shows a "sample data" banner and disables booking when `mock`.
 - `SearchResultCard`: best outbound itinerary + return feasibility + booking handoff metadata:
   - `bookingUrl`
   - `bookingFallbackUrl`
@@ -250,3 +251,4 @@ CI guard:
 | 2026-06-16 | Closed cron auth bypass (removed secret-free `x-vercel-cron` branch; secret-only timing-safe check). Hardened env: production now requires a strong non-default `CRON_SECRET` and a `DATABASE_URL` (boot-time `superRefine`), and `allowHeaderAuth()` requires explicit `ALLOW_HEADER_AUTH=true` instead of inferring from `NODE_ENV`. Added cron-auth + env regression tests. | `src/lib/services/cron-auth.ts`, `src/lib/services/cron-auth.test.ts`, `src/lib/env.ts`, `src/lib/env.test.ts`, `architecture.md` |
 | 2026-06-16 | Hardened the Python fli HTTP bridge: fail-closed auth on Vercel when `FLI_HTTP_SECRET` is empty (shared `is_request_authorized`, `hmac.compare_digest`); validate airport/carrier/date before importing `fli`; membership lookup instead of `getattr`; generic error bodies with server-side logging; crash-proof handlers; auth added to `/api/fli/health`. Added offline Python unittest guards. | `fli_bridge.py`, `api/fli/search.py`, `api/fli/health.py`, `tests/test_fli_bridge.py`, `architecture.md` |
 | 2026-06-16 | Fixed digest/watch duplicate-email race: both loops now claim the dedupe row (`digest_events` / `alert_events`) BEFORE sending and treat a `P2002` as "already handled → skip", patching the `messageId` after send. Added `maxDuration` to the digest cron route and a shared `isUniqueConstraintError` helper. Added claim-first regression tests. | `src/lib/services/digest-service.ts`, `src/lib/services/watch-service.ts`, `src/lib/utils/prisma-errors.ts`, `src/app/api/digest/run/route.ts`, `src/lib/services/digest-service.run.test.ts`, `src/lib/services/watch-service.test.ts`, `architecture.md` |
+| 2026-06-16 | Made silent mock-data fallback visible: added `meta.dataSource` (`live`/`mock`, derived from leg provenance) and `ProviderHealth.degraded`; the dashboard now shows a "sample data" banner, disables booking, and renders degraded provider chips as amber "sample data". Mock legs/results are no longer cached (no stale-mock poisoning). Bumped `SEARCH_QUERY_VERSION` to 4. Added provenance tests. | `src/lib/types/domain.ts`, `src/lib/services/search-service.ts`, `src/lib/providers/provider-a.ts`, `src/lib/providers/provider-b.ts`, `src/components/gowild-dashboard.tsx`, `src/lib/services/search-service.datasource.test.ts`, `architecture.md` |
