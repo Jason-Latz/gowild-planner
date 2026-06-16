@@ -142,10 +142,10 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 
 ### Auth Resolution
 Current behavior:
-- If Supabase session user exists, use that email.
-- In non-production mode, `x-user-email` header and demo fallback are supported.
-- In production, header auth is disabled unless `ALLOW_HEADER_AUTH=true`.
-- Production must not rely on header spoofing.
+- If a Supabase session user exists, use that email (the only trusted path for deployed environments).
+- The `x-user-email` header is honored **only** when `allowHeaderAuth()` is true, which requires an **explicit `ALLOW_HEADER_AUTH=true`** opt-in. It is NEVER inferred from `NODE_ENV` (preview/staging deploys are internet-reachable but not "production"). Header identity is full impersonation, so it must stay off everywhere except deliberate local dev.
+- The `demo@gowild.local` fallback is returned only when `NODE_ENV !== "production"`; production throws `UnauthorizedError` instead.
+- Production must rely on the Supabase session exclusively.
 
 ### Origin Code Semantics
 - Known metro codes are explicit and mapped in `ORIGIN_GROUP_FALLBACKS`.
@@ -195,7 +195,8 @@ Key constraints:
 
 ### Cron
 - `vercel.json` runs `/api/digest/run` hourly.
-- Request must include `CRON_SECRET` (header or bearer auth).
+- Authorization is **secret-only**, compared timing-safely: `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer $CRON_SECRET` (Vercel injects the Bearer header on cron invocations). The forgeable `x-vercel-cron` header NEVER authorizes on its own.
+- `CRON_SECRET` is validated at boot: in production it must be set, non-default (`!= "dev-secret"`), and `>=16` chars, or the app fails to start. `DATABASE_URL` is likewise required in production. Both are enforced by a `superRefine` in `src/lib/env.ts`.
 
 ## Security Posture
 - No automated booking execution.
@@ -246,3 +247,4 @@ CI guard:
 | 2026-04-28 | Removed repeated itinerary re-sorts in `search-service` by treating `buildItineraries()` output as a best-first stream and taking the first outbound/return match per destination window. | `src/lib/services/search-service.ts`, `src/lib/services/itinerary-service.ts`, `src/lib/services/itinerary-service.test.ts`, `architecture.md` |
 | 2026-06-16 | Fixed timezone-correctness bug: layovers/connections now use wall-clock face-value differences (`wallClockDiffMinutes`) instead of absolute-instant subtraction, and providers prefer authoritative `durationMinutes` over cross-timezone subtraction. Added cross-tz regression tests. | `src/lib/utils/date.ts`, `src/lib/services/itinerary-service.ts`, `src/lib/services/itinerary-service.test.ts`, `src/lib/providers/provider-manager.ts`, `src/lib/providers/provider-a.ts`, `src/lib/providers/provider-b.ts`, `architecture.md` |
 | 2026-06-16 | Canonicalized all adapters to naive local wall-clock timestamps (mock + provider-a/b stop UTC conversion), fixing the headline `matchesServiceDate` UTC-roll that silently dropped evening flights, and made booking-date generation timezone-deterministic. Added mock-data + booking regression tests. | `src/lib/providers/mock-data.ts`, `src/lib/providers/mock-data.test.ts`, `src/lib/providers/provider-a.ts`, `src/lib/providers/provider-b.ts`, `src/lib/services/booking-service.ts`, `src/lib/services/booking-service.test.ts`, `architecture.md` |
+| 2026-06-16 | Closed cron auth bypass (removed secret-free `x-vercel-cron` branch; secret-only timing-safe check). Hardened env: production now requires a strong non-default `CRON_SECRET` and a `DATABASE_URL` (boot-time `superRefine`), and `allowHeaderAuth()` requires explicit `ALLOW_HEADER_AUTH=true` instead of inferring from `NODE_ENV`. Added cron-auth + env regression tests. | `src/lib/services/cron-auth.ts`, `src/lib/services/cron-auth.test.ts`, `src/lib/env.ts`, `src/lib/env.test.ts`, `architecture.md` |

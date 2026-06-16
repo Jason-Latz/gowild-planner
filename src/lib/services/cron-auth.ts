@@ -19,14 +19,15 @@ export function isValidCronRequest(request: NextRequest) {
   const provided = request.headers.get("x-cron-secret");
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.startsWith("Bearer ")
-    ? authorization.replace("Bearer ", "")
+    ? authorization.slice("Bearer ".length)
     : null;
-  const vercelCron = request.headers.get("x-vercel-cron");
 
-  if (vercelCron === "1" && process.env.NODE_ENV === "production") {
-    return true;
-  }
-
+  // Authorize ONLY via the shared secret, compared timing-safely. Vercel injects
+  // `Authorization: Bearer ${CRON_SECRET}` on scheduled cron invocations, so the
+  // job still authenticates. The `x-vercel-cron` header is forgeable by any
+  // external caller and must never grant access on its own (doing so was a
+  // secret-free production auth bypass that could trigger digest/alert email
+  // sends and cost amplification).
   if (provided && safeEqual(provided, env.CRON_SECRET)) {
     return true;
   }

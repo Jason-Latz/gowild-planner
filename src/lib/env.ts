@@ -30,6 +30,28 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional().or(z.literal("")),
   ALERT_FROM_EMAIL: z.string().default("GoWild Explorer <alerts@example.com>"),
   CRON_SECRET: z.string().default("dev-secret"),
+}).superRefine((value, ctx) => {
+  if (value.NODE_ENV !== "production") {
+    return;
+  }
+
+  // Fail the boot fast in production rather than running with insecure defaults.
+  if (!value.DATABASE_URL) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["DATABASE_URL"],
+      message: "DATABASE_URL is required in production",
+    });
+  }
+
+  if (!value.CRON_SECRET || value.CRON_SECRET === "dev-secret" || value.CRON_SECRET.length < 16) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["CRON_SECRET"],
+      message:
+        "CRON_SECRET must be set to a strong non-default value (>=16 chars) in production",
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -46,7 +68,11 @@ export function hasSupabaseConfig() {
 }
 
 export function allowHeaderAuth() {
-  return process.env.NODE_ENV !== "production" || Boolean(env.ALLOW_HEADER_AUTH);
+  // Trusting an `x-user-email` header is full account impersonation, so it must
+  // be an EXPLICIT opt-in (ALLOW_HEADER_AUTH=true) and never inferred from
+  // NODE_ENV: preview/staging deploys are internet-reachable yet not
+  // "production". Local development sets the flag deliberately.
+  return env.ALLOW_HEADER_AUTH === true;
 }
 
 export function hasResendConfig() {
