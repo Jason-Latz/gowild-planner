@@ -82,16 +82,15 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 3. Cron run executes `runWatchAlerts()`:
    - evaluates each active watch via `search-service`.
    - creates dedupe hash from top results.
-   - sends email if dedupe key not seen.
-   - stores event in `alert_events`.
+   - **claim-first**: inserts the `alert_events` row (the dedupe claim) BEFORE sending; a unique-constraint collision (`P2002`) means another run already sent this alert, so it skips. The email goes out only after the claim commits, and the `messageId` is patched in afterward. This prevents overlapping/retried hourly crons from sending duplicate alerts.
 
 ### 3) Thursday Digest Flow
 1. Hourly cron invokes `POST /api/digest/run`.
 2. `runDigest()` loads users + digest preferences.
 3. Per user, checks local timezone send window and weekly dedupe key (`isoWeek`).
 4. Searches upcoming Friday/Saturday departures with round-trip requirement.
-5. Sends digest email (or optional empty digest).
-6. Persists digest event in `digest_events`.
+5. **claim-first**: inserts the `digest_events` row (the weekly claim) BEFORE sending; a `P2002` on the `(userId, isoWeek, digestType)` unique constraint means another run already owns the week, so it skips. The digest email is sent only after the claim commits, then the `messageId` is patched in.
+6. The route declares `maxDuration` so the per-user search fan-out is not killed mid-loop.
 
 ## Core Domain Rules
 
@@ -250,3 +249,4 @@ CI guard:
 | 2026-06-16 | Canonicalized all adapters to naive local wall-clock timestamps (mock + provider-a/b stop UTC conversion), fixing the headline `matchesServiceDate` UTC-roll that silently dropped evening flights, and made booking-date generation timezone-deterministic. Added mock-data + booking regression tests. | `src/lib/providers/mock-data.ts`, `src/lib/providers/mock-data.test.ts`, `src/lib/providers/provider-a.ts`, `src/lib/providers/provider-b.ts`, `src/lib/services/booking-service.ts`, `src/lib/services/booking-service.test.ts`, `architecture.md` |
 | 2026-06-16 | Closed cron auth bypass (removed secret-free `x-vercel-cron` branch; secret-only timing-safe check). Hardened env: production now requires a strong non-default `CRON_SECRET` and a `DATABASE_URL` (boot-time `superRefine`), and `allowHeaderAuth()` requires explicit `ALLOW_HEADER_AUTH=true` instead of inferring from `NODE_ENV`. Added cron-auth + env regression tests. | `src/lib/services/cron-auth.ts`, `src/lib/services/cron-auth.test.ts`, `src/lib/env.ts`, `src/lib/env.test.ts`, `architecture.md` |
 | 2026-06-16 | Hardened the Python fli HTTP bridge: fail-closed auth on Vercel when `FLI_HTTP_SECRET` is empty (shared `is_request_authorized`, `hmac.compare_digest`); validate airport/carrier/date before importing `fli`; membership lookup instead of `getattr`; generic error bodies with server-side logging; crash-proof handlers; auth added to `/api/fli/health`. Added offline Python unittest guards. | `fli_bridge.py`, `api/fli/search.py`, `api/fli/health.py`, `tests/test_fli_bridge.py`, `architecture.md` |
+| 2026-06-16 | Fixed digest/watch duplicate-email race: both loops now claim the dedupe row (`digest_events` / `alert_events`) BEFORE sending and treat a `P2002` as "already handled → skip", patching the `messageId` after send. Added `maxDuration` to the digest cron route and a shared `isUniqueConstraintError` helper. Added claim-first regression tests. | `src/lib/services/digest-service.ts`, `src/lib/services/watch-service.ts`, `src/lib/utils/prisma-errors.ts`, `src/app/api/digest/run/route.ts`, `src/lib/services/digest-service.run.test.ts`, `src/lib/services/watch-service.test.ts`, `architecture.md` |

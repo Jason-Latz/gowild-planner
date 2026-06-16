@@ -9,6 +9,7 @@ import { searchFlights } from "@/lib/services/search-service";
 import { getOrCreateUserByEmail, parseOriginCode } from "@/lib/services/user-service";
 import { tomorrowDateOnly } from "@/lib/utils/date";
 import { hashPayload } from "@/lib/utils/hash";
+import { isUniqueConstraintError } from "@/lib/utils/prisma-errors";
 
 export const watchInputSchema = z
   .object({
@@ -183,26 +184,55 @@ export async function runWatchAlerts() {
         continue;
       }
 
+      // Claim the dedupeHash BEFORE sending. The unique constraint atomically
+      // arbitrates overlapping/retried cron runs: a P2002 here means another run
+      // already sent this alert, so we skip instead of sending a duplicate.
+      try {
+        await prisma.alertEvent.create({
+          data: {
+            userId: watch.userId,
+            watchRuleId: watch.id,
+            dedupeHash,
+            destination: topResults[0]?.destination,
+            payload: {
+              results: topResults,
+              messageId: null,
+            },
+          },
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
       const emailResponse = await sendWatchAlertEmail({
         to: watch.user.email,
         watchName: watch.originGroup,
         results: topResults,
       });
 
-      await prisma.alertEvent.create({
-        data: {
-          userId: watch.userId,
-          watchRuleId: watch.id,
-          dedupeHash,
-          destination: topResults[0]?.destination,
-          payload: {
-            results: topResults,
-            messageId: emailResponse.id,
-          },
-        },
-      });
-
       sent += 1;
+
+      if (emailResponse.id) {
+        await prisma.alertEvent
+          .update({
+            where: { dedupeHash },
+            data: {
+              payload: {
+                results: topResults,
+                messageId: emailResponse.id,
+              },
+            },
+          })
+          .catch((updateError) => {
+            console.error("watch-alert-messageid-update-failure", {
+              watchId: watch.id,
+              error: updateError instanceof Error ? updateError.message : String(updateError),
+            });
+          });
+      }
     } catch (error) {
       failed += 1;
       console.error("watch-alert-failure", {

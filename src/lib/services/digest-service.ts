@@ -12,6 +12,7 @@ import {
   toDateOnly,
 } from "@/lib/utils/date";
 import { hashPayload } from "@/lib/utils/hash";
+import { isUniqueConstraintError } from "@/lib/utils/prisma-errors";
 
 function getTripScore(trip: DigestTrip) {
   return trip.outbound.score + trip.returnItinerary.score;
@@ -128,7 +129,42 @@ export async function runDigest(now = new Date()): Promise<DigestRunResult> {
       });
 
       const hadResults = trips.length > 0;
-      let messageId: string | null = null;
+
+      // Claim the weekly slot BEFORE sending. The @@unique([userId, isoWeek,
+      // digestType]) constraint atomically arbitrates overlapping/retried cron
+      // runs: a P2002 here means another run already owns this week, so we skip
+      // instead of sending a duplicate digest email.
+      try {
+        await prisma.digestEvent.create({
+          data: {
+            userId: user.id,
+            digestType: DigestType.WEEKEND,
+            isoWeek,
+            fingerprint: hashPayload(
+              trips.map((trip) => ({
+                destination: trip.destination,
+                departDate: trip.departDate,
+                returnDate: trip.returnDate,
+                score: getTripScore(trip),
+              })),
+            ),
+            hadResults,
+            payload: {
+              ranAt: now.toISOString(),
+              trips,
+              timezone: user.timezone,
+              weekendOf: toDateOnly(now),
+            },
+            messageId: null,
+          },
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          skippedUsers += 1;
+          continue;
+        }
+        throw error;
+      }
 
       if (hadResults || preference.sendEmptyDigest) {
         const response = await sendWeekendDigestEmail({
@@ -137,33 +173,28 @@ export async function runDigest(now = new Date()): Promise<DigestRunResult> {
           trips,
           hadResults,
         });
-        messageId = response.id;
         sentEmails += 1;
-      }
 
-      await prisma.digestEvent.create({
-        data: {
-          userId: user.id,
-          digestType: DigestType.WEEKEND,
-          isoWeek,
-          fingerprint: hashPayload(
-            trips.map((trip) => ({
-              destination: trip.destination,
-              departDate: trip.departDate,
-              returnDate: trip.returnDate,
-              score: getTripScore(trip),
-            })),
-          ),
-          hadResults,
-          payload: {
-            ranAt: now.toISOString(),
-            trips,
-            timezone: user.timezone,
-            weekendOf: toDateOnly(now),
-          },
-          messageId,
-        },
-      });
+        if (response.id) {
+          await prisma.digestEvent
+            .update({
+              where: {
+                userId_isoWeek_digestType: {
+                  userId: user.id,
+                  isoWeek,
+                  digestType: DigestType.WEEKEND,
+                },
+              },
+              data: { messageId: response.id },
+            })
+            .catch((updateError) => {
+              console.error("digest-messageid-update-failure", {
+                userId: user.id,
+                error: updateError instanceof Error ? updateError.message : String(updateError),
+              });
+            });
+        }
+      }
 
       processedUsers += 1;
     } catch (error) {
