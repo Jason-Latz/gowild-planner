@@ -6,6 +6,17 @@ import type { DigestTrip, SearchResultCard } from "@/lib/types/domain";
 
 const resend = hasResendConfig() ? new Resend(env.RESEND_API_KEY) : null;
 
+// Escape any provider/scraper-derived string before interpolating it into email
+// HTML so a malicious destination/booking value can never break out into markup.
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function toHtmlList(items: string[]) {
   return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
 }
@@ -15,7 +26,7 @@ function toWatchHtml(results: SearchResultCard[]) {
     .slice(0, 10)
     .map((result) => {
       const outboundDate = format(new Date(result.bestOutbound.legs[0].depTs), "EEE, MMM d");
-      return `<tr><td><strong>${result.destination}</strong></td><td>${outboundDate}</td><td>${result.bestOutbound.stops}</td><td>${result.returnCheck.feasible ? "Yes" : "No"}</td><td><a href=\"${result.bookingUrl}\">Book</a></td></tr>`;
+      return `<tr><td><strong>${escapeHtml(result.destination)}</strong></td><td>${escapeHtml(outboundDate)}</td><td>${result.bestOutbound.stops}</td><td>${result.returnCheck.feasible ? "Yes" : "No"}</td><td><a href=\"${escapeHtml(result.bookingUrl)}\">Book</a></td></tr>`;
     })
     .join("");
 
@@ -31,7 +42,7 @@ export async function sendWatchAlertEmail(args: {
   const lines = args.results.slice(0, 10).map((result) => {
     const stops = result.bestOutbound.stops;
     const returnBadge = result.returnCheck.feasible ? "Return available" : "No return";
-    return `${result.destination} | ${stops} stop(s) | ${result.bestOutbound.totalMinutes} mins | ${returnBadge}`;
+    return `${escapeHtml(result.destination)} | ${stops} stop(s) | ${result.bestOutbound.totalMinutes} mins | ${returnBadge}`;
   });
 
   if (!resend) {
@@ -84,7 +95,7 @@ export async function sendWeekendDigestEmail(args: {
   }
 
   const list = args.trips.map((trip) => {
-    return `${trip.destination} | depart ${trip.departDate} | return ${trip.returnDate} | ${trip.outbound.stops} stop(s) out, ${trip.returnItinerary.stops} stop(s) back`;
+    return `${escapeHtml(trip.destination)} | depart ${escapeHtml(trip.departDate)} | return ${escapeHtml(trip.returnDate)} | ${trip.outbound.stops} stop(s) out, ${trip.returnItinerary.stops} stop(s) back`;
   });
 
   if (!resend) {
@@ -97,7 +108,9 @@ export async function sendWeekendDigestEmail(args: {
     to: args.to,
     subject,
     html: `<p>Return-qualified trips for this weekend:</p>${toHtmlList(
-      args.trips.map((trip) => `${trip.destination} (<a href=\"${trip.bookingUrl}\">Book</a>)`),
+      args.trips.map(
+        (trip) => `${escapeHtml(trip.destination)} (<a href=\"${escapeHtml(trip.bookingUrl)}\">Book</a>)`,
+      ),
     )}<p>${toHtmlList(list)}</p>`,
   });
 
