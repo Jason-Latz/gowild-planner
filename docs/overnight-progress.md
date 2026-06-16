@@ -21,17 +21,17 @@ Take GoWild Planner from its current branch tip to ship-ready: land the tip on `
 - **Mock fallback**: providers A/B always mock (no creds); FliAdapter throws → failover silently returns mock as real. SearchResponse.meta has no `source`/degraded signal beyond cache/fresh. Phase B+D: surface it.
 - **Env**: `env.ts` zod-validates; `FLI_ENABLED` defaults true; `FLI_HTTP_SECRET` optional (open-by-default on the Python endpoints — Phase B).
 
-## Plan checklist (status)
-- [x] Phase 0/2: create this ledger + task list (DONE 2026-06-16)
-- [~] Background: red-team audit workflow `whvcksen3` running (8 dimensions + completeness critic)
-- [ ] Phase A: fast-forward `main` to tip; prune `codex/gowild-v1`; add project `CLAUDE.md` (@imports architecture.md/AGENTS.md)
-- [ ] Phase B: fix red-team bugs (headline timezone + regression test; visible mock fallback; auth/cron/scraper/fli-http/validation/dedupe) — each with guard test
-- [ ] Phase C: optimization & mistakes sweep (rate limiter / caches documented or fixed)
-- [ ] Phase D: real Supabase magic-link auth (login page + callback + client session); dashboard off the x-user-email shim; visible data-source health
-- [ ] Phase E: ship-grade tests (timezone regression, auth resolution, API route handlers, mailer, non-CHI origin, dedupe races)
-- [ ] Phase F: all five gates green
-- [ ] Phase G: deploy-readiness + precise GO-LIVE checklist (no autonomous prod promote / secret rotation)
-- [ ] Phase H: docs/launch/linkedin-post.md (2-3 drafts, draft only); finalize CLAUDE.md/architecture.md/this ledger/GO-LIVE
+## Plan checklist (status) — ALL COMPLETE
+- [x] Phase 0/2: ledger + task list + project `CLAUDE.md` (@imports architecture.md/AGENTS.md)
+- [x] Background red-team audit `whvcksen3`: 51 findings + critique, all integrated
+- [x] Phase A: `main` fast-forwarded to tip; `codex/gowild-v1` pruned; `CLAUDE.md` added
+- [x] Phase B: timezone fix (+regression), naive-timestamp canonicalization, visible mock fallback, cron/env/header-auth/fli-http hardening, scraper hardening, validation parity, mailer escaping, claim-first dedupe — each with guard tests
+- [x] Phase C: cache-key staleness fix, dead-code removal, fli health TTL, /api/health rate-limit; known limitations documented in architecture.md
+- [x] Phase D: Supabase magic-link auth (`/login` + `/auth/callback` + session-gated `/`); dashboard off the x-user-email shim in session mode; visible data-source health
+- [x] Phase E: tests added — timezone regression, auth resolution, API route handlers (/api/search, /api/digest/run), mailer, scraper, dedupe races, env validation, schema validation (62 JS tests, 8 Python tests)
+- [x] Phase F: all five gates green (lint, `npx tsc --noEmit`, test, build, check:architecture)
+- [x] Phase G: deploy-ready in repo (vercel.json cron correct, requirements.txt builds fli, .env.example prod-annotated); precise `docs/GO-LIVE.md` written
+- [x] Phase H: `docs/launch/linkedin-post.md` (3 drafts); docs finalized
 
 ## Decisions / Assumptions
 - Work lands on `main` per mission (DoD: "main fast-forwarded to the optimize tip"). Commit locally to `main`; **do NOT push to origin autonomously** (avoid triggering any Vercel deploy; pushing is a GO-LIVE step for Jason). Recorded as a decision; revisit if Jason wants it pushed.
@@ -73,8 +73,17 @@ Fix order P0 security → P1 correctness → P1 data-integrity → P2 trust → 
 
 **Re-scoped/dropped (per critique):** provider-a/b "cross-tz subtraction" CRITICALs are NOT defects for offset-bearing timestamps — already correctly handled (prefer authoritative field, keep offset-aware fallback). Do not over-fix.
 
-## What's left
-Phases D (magic-link auth), E (more tests), F (final gates), G (deploy/GO-LIVE), H (LinkedIn post + finalize docs). Integrate remaining hygiene items opportunistically.
+## What's left (HUMAN-GATED only)
+All autonomous work is complete and verified. Remaining items are Jason's calls (see `docs/GO-LIVE.md`):
+- Push `main` to origin (not done autonomously to avoid triggering a Vercel build).
+- Link the Vercel project, set production env vars, configure Supabase Auth redirect URLs, `prisma db push` to Supabase, promote to production.
+- Rotate the live Supabase secrets in `.env`/`.env.local` (advisable).
+- Pick/post a LinkedIn draft from `docs/launch/linkedin-post.md`.
+
+## Final state (2026-06-16)
+- Branch: local `main`, 24+ small commits ahead of `origin/main`, fast-forwarded from the optimize tip.
+- Gates: lint clean, `npx tsc --noEmit` clean, 62 JS tests + 8 Python tests pass, `npm run build` passes, `npm run check:architecture` passes.
+- Booking remains manual on Frontier (product invariant upheld). No prod promote / secret rotation / push done autonomously.
 
 ## How to verify
 Run all five gates after each milestone. Final: lint + `npx tsc --noEmit` + test + build + check:architecture all green on `main`.
