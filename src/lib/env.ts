@@ -55,6 +55,16 @@ const envSchema = z.object({
         "CRON_SECRET must be set to a strong non-default value (>=16 chars) in production",
     });
   }
+
+  // Production auth is Supabase magic-link; without these the app cannot resolve
+  // a real user and every request would be unauthorized. Fail fast at boot.
+  if (!value.NEXT_PUBLIC_SUPABASE_URL || !value.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["NEXT_PUBLIC_SUPABASE_URL"],
+      message: "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required in production",
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

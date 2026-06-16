@@ -33,7 +33,9 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
 
 ## Directory Map
 - `src/app/`:
-  - `page.tsx`: root page mounting dashboard.
+  - `page.tsx`: session-gated root (server component) — redirects to `/login` when Supabase is configured and there is no session; renders the dashboard in `session` or `dev` mode.
+  - `login/page.tsx`: Supabase magic-link sign-in UI.
+  - `auth/callback/route.ts`: exchanges the magic-link `code` for a session (sets auth cookies) and redirects.
   - `api/*`: JSON route handlers.
 - `src/components/`:
   - `gowild-dashboard.tsx`: main UI container.
@@ -147,6 +149,13 @@ Current behavior:
 - The `demo@gowild.local` fallback is returned only when `NODE_ENV !== "production"`; production throws `UnauthorizedError` instead.
 - Production must rely on the Supabase session exclusively.
 
+### Auth Flow (magic link)
+1. `/login` calls `supabase.auth.signInWithOtp({ email, options.emailRedirectTo: "/auth/callback" })` (browser client, PKCE).
+2. The user opens the emailed link → `/auth/callback?code=...` → `exchangeCodeForSession(code)` sets the session cookies (server client) → redirect to `/` (relative-only, no open redirect).
+3. `/` (server) resolves the session via `getUser()`; no session → redirect to `/login`. The dashboard runs in `session` mode (cookie auth, no `x-user-email` header) and offers Sign out.
+4. With Supabase unconfigured (local dev), `/` renders the dashboard in `dev` mode (editable email + `x-user-email`), which only authorizes when `ALLOW_HEADER_AUTH=true`.
+5. Production env validation requires `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` (and `DATABASE_URL`, strong `CRON_SECRET`) or the app refuses to boot.
+
 ### Origin Code Semantics
 - Known metro codes are explicit and mapped in `ORIGIN_GROUP_FALLBACKS`.
 - Any non-metro 3-letter code is treated as a direct airport.
@@ -243,7 +252,6 @@ CI guard:
 - MCP server wrapper around service layer (`SearchService`, `WatchService`, `DigestService`).
 - Additional provider adapters.
 - Destination preference scoring (temperature, distance, novelty).
-- Better auth UX with explicit magic-link sign-in flow.
 - Replace the Python bridge entirely with a pure TypeScript or external hosted implementation if Vercel Python runtime constraints become a bottleneck.
 
 ## Architecture Change Log
@@ -266,3 +274,4 @@ CI guard:
 | 2026-06-16 | Escaped all provider/scraper-derived strings (destination, booking URL, dates) before interpolating them into alert/digest email HTML, closing a latent HTML/script-injection vector at the email render boundary. Added a mailer escaping test. | `src/lib/mailer.ts`, `src/lib/mailer.test.ts`, `architecture.md` |
 | 2026-06-16 | Added rate limiting to the public `/api/health` route (was the only unprotected route) and gave the `provider-fli` health probe a 60s TTL so a transient failure no longer pins `ok:false` (or a stale `ok:true`) for the lifetime of a warm instance. | `src/app/api/health/route.ts`, `src/lib/providers/provider-fli.ts`, `architecture.md` |
 | 2026-06-16 | Cleanup: search cache key now includes the resolved+sorted origin airports (so reconfiguring a group's airports invalidates stale results), removed the no-op `returnMemo`, and deleted dead exports (`clampDate`, `isSameDate`, `getDefaultDigestSendDay`, `DEFAULT_SEND_TIME`) and a redundant provider-a temp. | `src/lib/services/search-service.ts`, `src/lib/utils/date.ts`, `src/lib/constants.ts`, `src/lib/providers/provider-a.ts`, `architecture.md` |
+| 2026-06-16 | Added real Supabase magic-link auth: `/login` (signInWithOtp), `/auth/callback` (code→session), and a session-gated `/`. Dashboard now runs in `session` mode (cookie auth, Sign out, no `x-user-email`) when Supabase is configured, falling back to `dev` header-shim mode locally. Production env now requires the Supabase URL + anon key. | `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/auth/callback/route.ts`, `src/components/gowild-dashboard.tsx`, `src/lib/env.ts`, `src/lib/env.test.ts`, `architecture.md` |

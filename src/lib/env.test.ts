@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const KEYS = ["NODE_ENV", "DATABASE_URL", "CRON_SECRET", "ALLOW_HEADER_AUTH"] as const;
+const KEYS = [
+  "NODE_ENV",
+  "DATABASE_URL",
+  "CRON_SECRET",
+  "ALLOW_HEADER_AUTH",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+] as const;
 // process.env types NODE_ENV as readonly; route mutations through a plain record.
 const procEnv = process.env as Record<string, string | undefined>;
 const saved: Record<string, string | undefined> = {};
@@ -50,8 +57,25 @@ describe("env validation", () => {
     await expect(loadEnv()).rejects.toThrow();
   });
 
+  it("rejects missing Supabase config in production", async () => {
+    setEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgres://db",
+      CRON_SECRET: STRONG_SECRET,
+      NEXT_PUBLIC_SUPABASE_URL: undefined,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: undefined,
+    });
+    await expect(loadEnv()).rejects.toThrow();
+  });
+
   it("accepts strong production config", async () => {
-    setEnv({ NODE_ENV: "production", DATABASE_URL: "postgres://db", CRON_SECRET: STRONG_SECRET });
+    setEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgres://db",
+      CRON_SECRET: STRONG_SECRET,
+      NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+    });
     const mod = await loadEnv();
     expect(mod.env.NODE_ENV).toBe("production");
   });

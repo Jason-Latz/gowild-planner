@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 
+import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import type { SearchResponse, SearchResultCard } from "@/lib/types/domain";
 import { tomorrowDateOnly } from "@/lib/utils/date";
 
@@ -69,8 +70,16 @@ function formatLegWithTime(leg: SearchResult["bestOutbound"]["legs"][number]) {
 
 const FALLBACK_EMAIL = "demo@gowild.local";
 
-export function GoWildDashboard() {
-  const [email, setEmail] = useState(FALLBACK_EMAIL);
+type DashboardProps = {
+  // "session": authenticated via a Supabase session cookie (production).
+  // "dev": local header-shim mode (editable email + x-user-email header).
+  mode: "session" | "dev";
+  initialEmail: string | null;
+};
+
+export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
+  const isDevMode = mode === "dev";
+  const [email, setEmail] = useState(initialEmail ?? FALLBACK_EMAIL);
   const [search, setSearch] = useState<SearchState>({
     originGroup: "CHI",
     departDate: tomorrowDateOnly(),
@@ -90,17 +99,38 @@ export function GoWildDashboard() {
   const [health, setHealth] = useState<HealthState | null>(null);
 
   useEffect(() => {
+    if (!isDevMode) {
+      return;
+    }
     const storedEmail = window.localStorage.getItem("gowild_email");
     if (storedEmail) {
       setEmail(storedEmail);
     }
-  }, []);
+  }, [isDevMode]);
 
   useEffect(() => {
+    if (!isDevMode) {
+      return;
+    }
     window.localStorage.setItem("gowild_email", email);
-  }, [email]);
+  }, [email, isDevMode]);
 
-  const headers = useMemo(() => ({ "x-user-email": email }), [email]);
+  // In session mode the Supabase auth cookie (sent automatically on same-origin
+  // requests) is the identity; the x-user-email header is dev-only and is
+  // ignored server-side unless ALLOW_HEADER_AUTH=true.
+  const headers = useMemo<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    if (isDevMode) {
+      next["x-user-email"] = email;
+    }
+    return next;
+  }, [email, isDevMode]);
+
+  async function signOut() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase?.auth.signOut();
+    window.location.href = "/login";
+  }
 
   async function loadWatches() {
     const response = await fetch("/api/watches", { headers });
@@ -304,12 +334,25 @@ export function GoWildDashboard() {
             <h2 className="text-xl font-semibold">Search</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-sm">
-                Email identity
-                <input
-                  className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
+                {isDevMode ? "Email identity (dev)" : "Signed in as"}
+                {isDevMode ? (
+                  <input
+                    className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                ) : (
+                  <div className="mt-1 flex items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
+                    <span className="truncate text-stone-800">{email}</span>
+                    <button
+                      type="button"
+                      onClick={signOut}
+                      className="shrink-0 rounded-lg border border-stone-300 px-2 py-1 text-xs font-medium text-stone-700 hover:bg-white"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
               </label>
               <label className="text-sm">
                 Origin (metro or airport code)
