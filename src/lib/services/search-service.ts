@@ -1,7 +1,7 @@
 import { addDays } from "date-fns";
 import { z } from "zod";
 
-import { DEFAULT_CARRIER, DEFAULT_ORIGIN_GROUP } from "@/lib/constants";
+import { DEFAULT_CARRIER, DEFAULT_ORIGIN_GROUP, ORIGIN_GROUP_REGEX } from "@/lib/constants";
 import { fetchDeparturesWithFailover } from "@/lib/providers/provider-manager";
 import { buildBookingLink } from "@/lib/services/booking-service";
 import {
@@ -28,7 +28,7 @@ function legsAreMock(legs: FlightLeg[]) {
 
 export const searchRequestSchema = z
   .object({
-    originGroup: z.string().trim().regex(/^[A-Za-z]{2,6}$/).default(DEFAULT_ORIGIN_GROUP),
+    originGroup: z.string().trim().regex(ORIGIN_GROUP_REGEX).default(DEFAULT_ORIGIN_GROUP),
     departDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)

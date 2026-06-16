@@ -9,6 +9,10 @@ export const ORIGIN_GROUP_FALLBACKS: Record<string, { name: string; airports: st
 
 export const DEFAULT_CARRIER = "F9";
 
+// Shared origin-group input constraint so the search, watch, and settings entry
+// points enforce identical character rules before parseOriginCode runs.
+export const ORIGIN_GROUP_REGEX = /^[A-Za-z]{2,6}$/;
+
 export const PROVIDER_CACHE_TTL_MINUTES = 30;
 export const SEARCH_CACHE_TTL_MINUTES = 15;
 

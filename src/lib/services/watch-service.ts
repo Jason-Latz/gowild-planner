@@ -2,20 +2,24 @@ import { DateMode, Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { NotFoundError, ValidationError } from "@/lib/api/errors";
-import { DEFAULT_ORIGIN_GROUP } from "@/lib/constants";
+import { DEFAULT_ORIGIN_GROUP, ORIGIN_GROUP_REGEX } from "@/lib/constants";
 import { sendWatchAlertEmail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
 import { searchFlights } from "@/lib/services/search-service";
 import { getOrCreateUserByEmail, parseOriginCode } from "@/lib/services/user-service";
-import { tomorrowDateOnly } from "@/lib/utils/date";
+import { isValidDateOnly, tomorrowDateOnly } from "@/lib/utils/date";
 import { hashPayload } from "@/lib/utils/hash";
 import { isUniqueConstraintError } from "@/lib/utils/prisma-errors";
 
 export const watchInputSchema = z
   .object({
-    originGroup: z.string().trim().min(2).max(6).default(DEFAULT_ORIGIN_GROUP),
+    originGroup: z.string().trim().regex(ORIGIN_GROUP_REGEX).default(DEFAULT_ORIGIN_GROUP),
     dateMode: z.nativeEnum(DateMode).default(DateMode.TOMORROW),
-    exactDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    exactDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine((value) => isValidDateOnly(value), "exactDate must be a valid YYYY-MM-DD date")
+      .optional(),
     maxStops: z.coerce.number().int().min(0).max(2).default(2),
     requireReturn: z.boolean().default(true),
     minNights: z.coerce.number().int().min(1).max(7).default(1),

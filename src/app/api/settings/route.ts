@@ -5,11 +5,12 @@ import { AppError } from "@/lib/api/errors";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { errorJson, okJson } from "@/lib/api/responses";
 import { resolveUserEmail } from "@/lib/auth/user-context";
+import { ORIGIN_GROUP_REGEX } from "@/lib/constants";
 import { getSettings, updateSettings } from "@/lib/services/settings-service";
 
 const settingsSchema = z.object({
   timezone: z.string().min(2).max(64).optional(),
-  defaultOriginGroup: z.string().min(2).max(6).optional(),
+  defaultOriginGroup: z.string().trim().regex(ORIGIN_GROUP_REGEX).optional(),
   sendDay: z.number().int().min(0).max(6).optional(),
   sendLocalTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   minNights: z.number().int().min(1).max(7).optional(),

@@ -20,7 +20,7 @@ vi.mock("@/lib/services/search-service", () => ({
 import { sendWatchAlertEmail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
 import { searchFlights } from "@/lib/services/search-service";
-import { runWatchAlerts } from "@/lib/services/watch-service";
+import { runWatchAlerts, watchInputSchema } from "@/lib/services/watch-service";
 
 const watch = {
   id: "watch-1",
@@ -114,5 +114,26 @@ describe("runWatchAlerts claim-first dedupe", () => {
     expect(first.emailsSent).toBe(1);
     expect(second.emailsSent).toBe(0);
     expect(second.failedWatches).toBe(0);
+  });
+});
+
+describe("watchInputSchema validation", () => {
+  it("rejects an impossible calendar exactDate", () => {
+    expect(() =>
+      watchInputSchema.parse({ dateMode: "EXACT_DATE", exactDate: "2026-02-30" }),
+    ).toThrowError();
+  });
+
+  it("rejects non-letter originGroup junk", () => {
+    expect(() => watchInputSchema.parse({ originGroup: "A1" })).toThrowError();
+    expect(() => watchInputSchema.parse({ originGroup: "<x>" })).toThrowError();
+  });
+
+  it("accepts valid origin codes and a real exactDate", () => {
+    expect(watchInputSchema.parse({ originGroup: "chi" }).originGroup).toBe("CHI");
+    expect(
+      watchInputSchema.parse({ originGroup: "DEN", dateMode: "EXACT_DATE", exactDate: "2026-06-20" })
+        .exactDate,
+    ).toBe("2026-06-20");
   });
 });
