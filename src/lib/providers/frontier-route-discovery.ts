@@ -21,17 +21,32 @@ type RouteMetadata = {
   destinationAirportCode: string;
 };
 
+// Slugs are interpolated into an outbound request path, so they must be tightly
+// constrained to prevent path traversal / request smuggling from scraped or
+// untrusted input. Origin slugs come from a hardcoded allowlist; route slugs are
+// pulled from scraped Frontier markup and validated before use.
+const SAFE_SLUG_RE = /^[a-z0-9-]+$/;
+const ROUTE_SLUG_RE = /^flights-from-[a-z0-9-]{1,80}$/;
+const IATA_RE = /^[A-Z]{3}$/;
+
 const htmlCache = new Map<string, Promise<string>>();
 const routeCandidatesCache = new Map<string, Promise<string[]>>();
 const routeMetadataCache = new Map<string, Promise<RouteMetadata | null>>();
 
 async function fetchFrontierPage(slug: string) {
+  if (!SAFE_SLUG_RE.test(slug)) {
+    throw new Error("Refusing to fetch unsafe Frontier slug");
+  }
+
   const cached = htmlCache.get(slug);
   if (cached) {
     return cached;
   }
 
-  const request = fetch(`${FRONTIER_FLIGHTS_BASE_URL}/${slug}`, {
+  // new URL with a validated [a-z0-9-] slug cannot escape the Frontier host/path.
+  const url = new URL(slug, `${FRONTIER_FLIGHTS_BASE_URL}/`);
+
+  const request = fetch(url, {
     headers: {
       "user-agent": FRONTIER_USER_AGENT,
       accept: "text/html,application/xhtml+xml",
@@ -47,6 +62,11 @@ async function fetchFrontierPage(slug: string) {
   });
 
   htmlCache.set(slug, request);
+  // Never pin a transient failure: evict on rejection so the next call retries
+  // instead of returning the cached rejected promise forever.
+  request.catch(() => {
+    htmlCache.delete(slug);
+  });
   return request;
 }
 
@@ -114,7 +134,9 @@ export function extractRoutePageSlugs(nextData: NextData) {
     const links = (value as { links?: Array<{ url?: string }> }).links ?? [];
     for (const link of links) {
       const slug = String(link.url ?? "");
-      if (slug.startsWith("flights-from-")) {
+      // Strict allowlist: only well-formed flights-from-* slugs, never arbitrary
+      // scraped URLs that could carry path traversal / query / host injection.
+      if (ROUTE_SLUG_RE.test(slug)) {
         routeSlugs.add(slug);
       }
     }
@@ -134,6 +156,13 @@ async function resolveRouteMetadata(routeSlug: string): Promise<RouteMetadata | 
     .catch(() => null);
 
   routeMetadataCache.set(routeSlug, request);
+  // Cache only successful metadata; evict transient failures / parse misses so a
+  // later call can retry instead of being pinned to null for the process life.
+  request.then((result) => {
+    if (result === null) {
+      routeMetadataCache.delete(routeSlug);
+    }
+  });
   return request;
 }
 
@@ -169,6 +198,12 @@ async function mapWithConcurrency<T, R>(
 
 export async function discoverDirectDestinationsForAirport(airportCode: string): Promise<string[]> {
   const normalizedAirport = airportCode.toUpperCase();
+  // Defensive IATA guard at the scraper boundary so non-airport input never
+  // drives a network fetch, regardless of caller validation.
+  if (!IATA_RE.test(normalizedAirport)) {
+    return [];
+  }
+
   const cached = routeCandidatesCache.get(normalizedAirport);
   if (cached) {
     return cached;
@@ -207,5 +242,10 @@ export async function discoverDirectDestinationsForAirport(airportCode: string):
   })();
 
   routeCandidatesCache.set(normalizedAirport, request);
+  // Evict on failure so a transient origin-page error does not permanently mark
+  // the airport as routeless until the process restarts.
+  request.catch(() => {
+    routeCandidatesCache.delete(normalizedAirport);
+  });
   return request;
 }
