@@ -1,14 +1,18 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-import { env, hasSupabaseConfig } from "@/lib/env";
+// NEXT_PUBLIC_* values must be read via DIRECT `process.env.NEXT_PUBLIC_*` member
+// access so Next.js inlines the literal strings into the client bundle at build
+// time. Reading them through the zod-parsed `env` object in `@/lib/env` (which
+// calls `safeParse(process.env)` on the whole object) works on the server but
+// yields `undefined` in the browser, which made the client think Supabase was
+// not configured.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export function createSupabaseBrowserClient() {
-  if (!hasSupabaseConfig()) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return null;
   }
 
-  return createBrowserClient(
-    env.NEXT_PUBLIC_SUPABASE_URL || "",
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-  );
+  return createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
