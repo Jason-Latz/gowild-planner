@@ -84,15 +84,19 @@ Deployed to Vercel production with Jason's explicit authorization. Done autonomo
 
 Verified live: `/` → 307 → `/login`; `/login` 200 (magic-link UI); `/api/health` 200 with `provider-fli: ok (http)`.
 
-## Remaining (2 Supabase-dashboard steps — genuinely dashboard-gated; no MCP tool / token to do them)
-1. **DB password** — `/api/health` shows `db.ok:false` because Vercel `DATABASE_URL` has a placeholder password (Supabase doesn't expose/let-me-set the DB password without the dashboard or a mgmt token). Fix: Supabase dashboard → project `gowild-planner` → Settings → Database → **Reset database password** → put it into the Vercel `DATABASE_URL` (exact template below) → redeploy. Template: `postgresql://postgres.alvgkrnkyitvtzhxkpim:<PASSWORD>@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require`
-2. **Auth redirect URLs** — Supabase dashboard → Authentication → URL Configuration → Site URL `https://gowild-planner.vercel.app`, add Redirect URL `https://gowild-planner.vercel.app/auth/callback` (so magic links land back on prod).
-Optional: set `RESEND_API_KEY` in Vercel for real email (else digest/alerts are logged as mocks); update local `.env`/`.env.local` to the new project for local dev.
+## FULLY LIVE (2026-06-19) — both finishing steps completed via the Supabase dashboard (browser automation)
+- **DB password** reset to a known strong value in the Supabase dashboard; set the real `DATABASE_URL` in Vercel (pooler `aws-1-us-east-1`, session mode) + redeployed. **`/api/health` now returns `ok:true`, `db:true`.**
+- **Auth redirect URLs** set: Site URL `https://gowild-planner.vercel.app` + Redirect URL `https://gowild-planner.vercel.app/auth/callback` (magic-link wired for prod).
+- Local `.env`/`.env.local` synced to the new Supabase project (URL, anon, DATABASE_URL) for local dev.
+
+## Known limitation (next optimization, NOT a deploy defect)
+- **Cold live search is very slow** for broad origins (e.g. CHI = ORD+MDW). `provider-fli` fans out: a Frontier route-page scrape per destination + a Google-Flights query per destination, per origin airport, each via a separate Python function invocation (concurrency 6). A first/uncached CHI search exceeds ~240s. fli itself is healthy (`/api/health` shows `provider-fli: ok`); it's just a large synchronous fan-out. Caching (ProviderLegCache 30m, SearchResultsCache 15m) helps repeats but the cold call must finish first. Fix paths: cap the destination fan-out (top-N routes), pre-warm `ProviderLegCache` for seeded origins via the daily cron, raise `/api/search` `maxDuration`, and/or move discovery+search to a background job. Worth a proper, tested change — not a rushed end-of-session edit.
 
 ## Final state
-- Code: `origin/main` @ 2c05edf; lint clean, tsc clean, 62 JS + 8 Python tests pass, build passes, architecture-guard passes.
-- Deployed to Vercel production; DB schema + seed live in the new Supabase project; fli live.
-- Booking remains manual on Frontier (invariant upheld). Supabase secrets NOT rotated (per Jason; never exposed).
+- Code: `origin/main` @ b0c756e; lint clean, tsc clean, 62 JS + 8 Python tests pass, build passes, architecture-guard passes.
+- **Deployed & live at https://gowild-planner.vercel.app** — `ok:true`, `db:true`, `provider-fli:ok`; `/`→`/login` gating works; login page renders.
+- New Supabase project `gowild-planner` (ref `alvgkrnkyitvtzhxkpim`): schema + CHI seed live; auth URLs configured; DB password known + in Vercel.
+- Booking remains manual on Frontier (invariant upheld). Supabase secrets NOT rotated (per Jason; never exposed). Optional next: set `RESEND_API_KEY` for real emails; optimize cold-search latency.
 
 ## How to verify
 Run all five gates after each milestone. Final: lint + `npx tsc --noEmit` + test + build + check:architecture all green on `main`.
