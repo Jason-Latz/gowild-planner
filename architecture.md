@@ -88,7 +88,7 @@ GoWild Explorer is a Next.js App Router web app with server route handlers, a Pr
    - **claim-first**: inserts the `alert_events` row (the dedupe claim) BEFORE sending; a unique-constraint collision (`P2002`) means another run already sent this alert, so it skips. The email goes out only after the claim commits, and the `messageId` is patched in afterward. This prevents overlapping/retried hourly crons from sending duplicate alerts.
 
 ### 3) Thursday Digest Flow
-1. Hourly cron invokes `POST /api/digest/run`.
+1. Scheduled cron invokes `POST /api/digest/run` (daily on Hobby; hourly on Pro).
 2. `runDigest()` loads users + digest preferences.
 3. Per user, checks local timezone send window and weekly dedupe key (`isoWeek`).
 4. Searches upcoming Friday/Saturday departures with round-trip requirement.
@@ -204,7 +204,7 @@ Key constraints:
 - `frontier-route-discovery` hardening: route slugs scraped from Frontier markup are validated against a strict `^flights-from-[a-z0-9-]{1,80}$` allowlist and requested via `new URL` (no path/host/query injection); a defensive `^[A-Z]{3}$` IATA guard prevents non-airport input from triggering a fetch; and failed fetches/parses are evicted from the module caches (not pinned forever), so a transient Frontier blip self-heals on the next call.
 
 ### Cron
-- `vercel.json` runs `/api/digest/run` hourly.
+- `vercel.json` runs `/api/digest/run` **daily at 13:00 UTC** (`0 13 * * *`). The Vercel **Hobby plan only permits daily cron**; an hourly schedule (`0 * * * *`) requires the Pro plan. 13:00 UTC matches the default Chicago Thursday 08:00 send window. On Pro, change the schedule back to hourly so per-timezone send windows all fire.
 - Authorization is **secret-only**, compared timing-safely: `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer $CRON_SECRET` (Vercel injects the Bearer header on cron invocations). The forgeable `x-vercel-cron` header NEVER authorizes on its own.
 - `CRON_SECRET` is validated at boot: in production it must be set, non-default (`!= "dev-secret"`), and `>=16` chars, or the app fails to start. `DATABASE_URL` is likewise required in production. Both are enforced by a `superRefine` in `src/lib/env.ts`.
 
@@ -276,3 +276,4 @@ CI guard:
 | 2026-06-16 | Cleanup: search cache key now includes the resolved+sorted origin airports (so reconfiguring a group's airports invalidates stale results), removed the no-op `returnMemo`, and deleted dead exports (`clampDate`, `isSameDate`, `getDefaultDigestSendDay`, `DEFAULT_SEND_TIME`) and a redundant provider-a temp. | `src/lib/services/search-service.ts`, `src/lib/utils/date.ts`, `src/lib/constants.ts`, `src/lib/providers/provider-a.ts`, `architecture.md` |
 | 2026-06-16 | Added real Supabase magic-link auth: `/login` (signInWithOtp), `/auth/callback` (code→session), and a session-gated `/`. Dashboard now runs in `session` mode (cookie auth, Sign out, no `x-user-email`) when Supabase is configured, falling back to `dev` header-shim mode locally. Production env now requires the Supabase URL + anon key. | `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/auth/callback/route.ts`, `src/components/gowild-dashboard.tsx`, `src/lib/env.ts`, `src/lib/env.test.ts`, `architecture.md` |
 | 2026-06-16 | Added ship-grade tests: `resolveUserEmail` auth-resolution (header honored only when allowed, session email, prod 401), and API route-handler tests for `/api/digest/run` (cron auth gating) and `/api/search` (validation 400 + success). | `src/lib/auth/user-context.test.ts`, `src/app/api/digest/run/route.test.ts`, `src/app/api/search/route.test.ts`, `architecture.md` |
+| 2026-06-19 | Deploy: changed the cron schedule from hourly to daily (`0 13 * * *`) so it deploys on the Vercel Hobby plan (Hobby permits only daily cron; hourly needs Pro). 13:00 UTC matches the default Chicago Thursday 08:00 send window. | `vercel.json`, `architecture.md` |

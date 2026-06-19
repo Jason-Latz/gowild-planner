@@ -56,8 +56,10 @@ Leave as-is / optional:
 
 ## 6. Deploy
 - Promote a production deployment (push to `main`, or `vercel --prod` / promote in the
-  dashboard). The hourly cron (`vercel.json` → `POST /api/digest/run` at `0 * * * *`)
-  is registered from `vercel.json` on deploy.
+  dashboard). The cron (`vercel.json` → `POST /api/digest/run`) is registered on deploy.
+  **It runs daily at 13:00 UTC** because the Vercel Hobby plan only allows daily cron;
+  to restore the intended hourly cadence (so all per-timezone send windows fire),
+  upgrade to Pro and set the schedule back to `0 * * * *`.
 
 ## 7. Verify (post-deploy smoke test)
 - `GET /api/health` → `200`, `db.ok: true`, fli provider not degraded.

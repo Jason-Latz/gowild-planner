@@ -23,7 +23,7 @@ The fun engineering bits:
 • A Python bridge wrapping Google-Flights-backed data for real non-stop timing, running
   as **Vercel Python functions** alongside the Next.js app.
 • Next.js 16 / React 19 / TypeScript, Prisma on Supabase Postgres, Resend for email,
-  an hourly Vercel cron driving the digest + alerts.
+  a scheduled Vercel cron driving the digest + alerts.
 • A correctness detail I'm weirdly proud of: flight times are local wall-clock with no
   timezone offset, so durations come from authoritative fields and layovers from
   same-airport wall-clock math — never naive timestamp subtraction across timezones.
@@ -46,7 +46,7 @@ sends a Thursday digest of where you could go this weekend. When you find one yo
 it drops you straight into Frontier to book — your money, your call.
 
 Under the hood it's a Next.js app on Vercel with a Python flight-data bridge, a
-Postgres/Supabase backend, magic-link sign-in, and an hourly cron that does the watching
+Postgres/Supabase backend, magic-link sign-in, and a scheduled cron that does the watching
 so you don't have to.
 
 Next stop: anywhere. ✈️
