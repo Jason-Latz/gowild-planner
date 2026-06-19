@@ -73,17 +73,26 @@ Fix order P0 security → P1 correctness → P1 data-integrity → P2 trust → 
 
 **Re-scoped/dropped (per critique):** provider-a/b "cross-tz subtraction" CRITICALs are NOT defects for offset-bearing timestamps — already correctly handled (prefer authoritative field, keep offset-aware fallback). Do not over-fix.
 
-## What's left (HUMAN-GATED only)
-All autonomous work is complete and verified. Remaining items are Jason's calls (see `docs/GO-LIVE.md`):
-- Push `main` to origin (not done autonomously to avoid triggering a Vercel build).
-- Link the Vercel project, set production env vars, configure Supabase Auth redirect URLs, `prisma db push` to Supabase, promote to production.
-- Rotate the live Supabase secrets in `.env`/`.env.local` (advisable).
-- Pick/post a LinkedIn draft from `docs/launch/linkedin-post.md`.
+## SHIPPED (2026-06-19) — live at https://gowild-planner.vercel.app
+Deployed to Vercel production with Jason's explicit authorization. Done autonomously:
+- Pushed `main` to GitHub (origin/main @ 2c05edf).
+- Created Vercel project `gowild-planner` (linked + GitHub-connected); deployed to production (alias `gowild-planner.vercel.app`).
+- Set all production env vars (DATABASE_URL, Supabase URL/anon, fresh strong CRON_SECRET + FLI_HTTP_SECRET, NEXT_PUBLIC_APP_URL, ALLOW_HEADER_AUTH=false, FLI_ENABLED, ALERT_FROM_EMAIL, FLI_HTTP_BASE_URL).
+- The old Supabase "GoWild" project was paused >90 days (unrestorable), so created a **new free Supabase project** `gowild-planner` (ref `alvgkrnkyitvtzhxkpim`, us-east-1); applied the full Prisma schema via MCP migration + seeded the CHI origin group.
+- Changed cron hourly→daily (`0 13 * * *`) for the Vercel Hobby plan (hourly needs Pro).
+- Fixed fli self-call to use the public alias (`FLI_HTTP_BASE_URL`) — **provider-fli is live/healthy in prod**.
 
-## Final state (2026-06-16)
-- Branch: local `main`, ~22 small commits ahead of `origin/main`, fast-forwarded from the optimize tip.
-- Gates: lint clean, `npx tsc --noEmit` clean, 62 JS tests + 8 Python tests pass, `npm run build` passes, `npm run check:architecture` passes.
-- Booking remains manual on Frontier (product invariant upheld). No prod promote / secret rotation / push done autonomously.
+Verified live: `/` → 307 → `/login`; `/login` 200 (magic-link UI); `/api/health` 200 with `provider-fli: ok (http)`.
+
+## Remaining (2 Supabase-dashboard steps — genuinely dashboard-gated; no MCP tool / token to do them)
+1. **DB password** — `/api/health` shows `db.ok:false` because Vercel `DATABASE_URL` has a placeholder password (Supabase doesn't expose/let-me-set the DB password without the dashboard or a mgmt token). Fix: Supabase dashboard → project `gowild-planner` → Settings → Database → **Reset database password** → put it into the Vercel `DATABASE_URL` (exact template below) → redeploy. Template: `postgresql://postgres.alvgkrnkyitvtzhxkpim:<PASSWORD>@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require`
+2. **Auth redirect URLs** — Supabase dashboard → Authentication → URL Configuration → Site URL `https://gowild-planner.vercel.app`, add Redirect URL `https://gowild-planner.vercel.app/auth/callback` (so magic links land back on prod).
+Optional: set `RESEND_API_KEY` in Vercel for real email (else digest/alerts are logged as mocks); update local `.env`/`.env.local` to the new project for local dev.
+
+## Final state
+- Code: `origin/main` @ 2c05edf; lint clean, tsc clean, 62 JS + 8 Python tests pass, build passes, architecture-guard passes.
+- Deployed to Vercel production; DB schema + seed live in the new Supabase project; fli live.
+- Booking remains manual on Frontier (invariant upheld). Supabase secrets NOT rotated (per Jason; never exposed).
 
 ## How to verify
 Run all five gates after each milestone. Final: lint + `npx tsc --noEmit` + test + build + check:architecture all green on `main`.
