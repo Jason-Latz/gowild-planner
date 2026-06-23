@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 import { differenceInMilliseconds } from "date-fns";
 
-import { env, hasFliHttpBaseUrl, isFliEnabled } from "@/lib/env";
+import { env, fliMaxDestinations, hasFliHttpBaseUrl, isFliEnabled } from "@/lib/env";
 import { discoverDirectDestinationsForAirport } from "@/lib/providers/frontier-route-discovery";
 import type { ProviderAdapter, ProviderQuery } from "@/lib/providers/types";
 import type { FlightLeg } from "@/lib/types/domain";
@@ -271,9 +271,21 @@ export class FliAdapter implements ProviderAdapter {
       throw new Error(health.message);
     }
 
-    const destinations = await discoverDirectDestinationsForAirport(query.airportCode);
-    if (destinations.length === 0) {
+    const discovered = await discoverDirectDestinationsForAirport(query.airportCode);
+    if (discovered.length === 0) {
       throw new Error(`No Frontier route metadata found for ${query.airportCode}`);
+    }
+
+    // Bound the per-airport fan-out: a hub can have 100+ direct destinations, and
+    // one fli query each (even at SEARCH_CONCURRENCY) is what makes a cold search
+    // explode. Cap to the first N (FLI_MAX_DESTINATIONS) and never drop silently.
+    const maxDestinations = fliMaxDestinations();
+    const destinations = discovered.slice(0, maxDestinations);
+    if (discovered.length > destinations.length) {
+      console.warn(
+        `[provider-fli] ${query.airportCode}: capped ${discovered.length} direct destinations to ` +
+          `${destinations.length} (FLI_MAX_DESTINATIONS); ${discovered.length - destinations.length} not searched`,
+      );
     }
 
     const routeResults = await mapWithConcurrency(destinations, SEARCH_CONCURRENCY, async (destination) =>

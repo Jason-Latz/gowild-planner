@@ -198,6 +198,15 @@ Key constraints:
 - Provider leg cache TTL: 30 minutes.
 - Search result cache TTL: 15 minutes.
 
+### Fan-out bound (fli)
+- `provider-fli` discovers every direct destination for an airport and fires one timing query per
+  destination (`SEARCH_CONCURRENCY` at a time). A hub returns 50+ destinations (e.g. DEN = 50), and
+  the multi-stop graph expansion repeats this per intermediate airport — the root cause of slow cold
+  searches. `FLI_MAX_DESTINATIONS` (default 40) caps the per-airport fan-out; the overflow is dropped
+  and logged (`[provider-fli] <APT>: capped N … to M`), never silently. Tune it down for latency or up
+  for coverage. This is a latency bound, not a correctness change — capped airports may omit some
+  long-tail destinations.
+
 ### Health
 - `GET /api/health` checks DB query + provider health probes.
 - `provider-fli` health checks the active bridge transport and installed `flights` package, but does not probe every Frontier route page.
@@ -282,3 +291,4 @@ CI guard:
 | 2026-06-23 | Dashboard UX: wrapped the search controls in a `<form>` with a `type="submit"` button so pressing Enter in any field runs the search (previously Enter did nothing), and made the search status line a persistent `aria-live="polite"` region so result/error messages are announced to screen readers. No API/behavior change. | `src/components/gowild-dashboard.tsx`, `architecture.md` |
 | 2026-06-23 | `settings-service.updateSettings` now returns the values its own transaction wrote (`user.update` + `digestPreference.upsert` results) instead of calling the upsert-shaped `getSettings` afterward — removes the extra read-path write per save. Added the first `settings-service` unit tests (round-trip, night-bound normalization, invalid-timezone reject). Removed from Known Limitations. | `src/lib/services/settings-service.ts`, `src/lib/services/settings-service.test.ts`, `architecture.md` |
 | 2026-06-23 | Dashboard results empty-state UX: distinguish "not searched yet" from "searched, zero matches" (previously always showed "Run a search…" even after a 0-result search), and when the last search required a return, offer a one-click "search without requiring a return" retry (`runSearch` now accepts param overrides and syncs them to the form). Honest conditional copy — no false claim about why a result set is empty. | `src/components/gowild-dashboard.tsx`, `architecture.md` |
+| 2026-06-23 | Bounded the fli cold-search fan-out (headline latency limitation): `FLI_MAX_DESTINATIONS` (default 40) caps how many direct destinations `provider-fli` queries per airport; the overflow is dropped and `console.warn`-logged, never silent. Verified live — DEN discovers 50 destinations and was capped to the configured limit. Added `fliMaxDestinations()` accessor + fan-out cap regression tests. | `src/lib/env.ts`, `src/lib/providers/provider-fli.ts`, `src/lib/providers/provider-fli.test.ts`, `architecture.md` |

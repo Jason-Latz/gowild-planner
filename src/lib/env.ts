@@ -27,6 +27,10 @@ const envSchema = z.object({
   FLI_HTTP_BASE_URL: z.string().url().optional().or(z.literal("")),
   FLI_HTTP_SECRET: z.string().optional().or(z.literal("")),
   FLI_PYTHON_BIN: z.string().default("python3"),
+  // Upper bound on how many direct destinations the fli adapter fans out to per
+  // origin airport. A hub can have 100+ routes; querying every one is what makes
+  // a cold search explode. Tune down for lower latency, up for more coverage.
+  FLI_MAX_DESTINATIONS: z.coerce.number().int().min(1).default(40),
   RESEND_API_KEY: z.string().optional().or(z.literal("")),
   ALERT_FROM_EMAIL: z.string().default("GoWild Explorer <alerts@example.com>"),
   CRON_SECRET: z.string().default("dev-secret"),
@@ -102,6 +106,10 @@ export function hasProviderBConfig() {
 
 export function isFliEnabled() {
   return env.FLI_ENABLED;
+}
+
+export function fliMaxDestinations() {
+  return env.FLI_MAX_DESTINATIONS;
 }
 
 export function hasFliHttpBaseUrl() {
