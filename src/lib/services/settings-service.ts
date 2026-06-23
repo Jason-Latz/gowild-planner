@@ -77,8 +77,10 @@ export async function updateSettings(email: string, input: SettingsInput) {
   const user = await getOrCreateUserByEmail(email);
   const nights = normalizeNights(input.minNights, input.maxNights);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
+  // Return the values the transaction itself wrote instead of re-reading via
+  // getSettings(), which runs another (upsert-shaped) write on the read path.
+  const { updatedUser, digestPreference } = await prisma.$transaction(async (tx) => {
+    const updatedUser = await tx.user.update({
       where: { id: user.id },
       data: {
         timezone: input.timezone,
@@ -86,7 +88,7 @@ export async function updateSettings(email: string, input: SettingsInput) {
       },
     });
 
-    await tx.digestPreference.upsert({
+    const digestPreference = await tx.digestPreference.upsert({
       where: { userId: user.id },
       update: {
         sendDay: input.sendDay,
@@ -106,7 +108,14 @@ export async function updateSettings(email: string, input: SettingsInput) {
         sendEmptyDigest: input.sendEmptyDigest ?? false,
       },
     });
+
+    return { updatedUser, digestPreference };
   });
 
-  return getSettings(email);
+  return {
+    email: updatedUser.email,
+    timezone: updatedUser.timezone,
+    defaultOriginGroup: updatedUser.defaultOriginGroup,
+    digestPreference,
+  };
 }
