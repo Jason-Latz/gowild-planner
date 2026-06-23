@@ -216,7 +216,8 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
       setDataSource(payload.meta.dataSource ?? null);
       setLastRequireReturn(effective.requireReturn);
       setHasSearched(true);
-      setStatus(`Found ${payload.results.length} return-aware destination(s).`);
+      const destinationLabel = effective.requireReturn ? "return-aware destination(s)" : "destination(s)";
+      setStatus(`Found ${payload.results.length} ${destinationLabel}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Search failed");
     } finally {
