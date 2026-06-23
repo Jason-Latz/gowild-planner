@@ -7,12 +7,30 @@ type Bucket = {
 
 const buckets = new Map<string, Bucket>();
 
+// Reclaim memory from abandoned buckets at most once per interval instead of
+// sweeping the whole map on every request. Per-key expiry is still enforced on
+// access (see the `existing.resetAt <= now` reset below), so throttling the
+// sweep only defers memory reclamation — it never relaxes the rate limit.
+const CLEANUP_INTERVAL_MS = 60_000;
+let lastCleanupAt = 0;
+
 function cleanupExpired(now: number) {
   for (const [key, bucket] of buckets.entries()) {
     if (bucket.resetAt <= now) {
       buckets.delete(key);
     }
   }
+}
+
+/** Test/diagnostic helper: current number of live buckets. */
+export function getActiveBucketCount() {
+  return buckets.size;
+}
+
+/** Test helper: clear all limiter state. */
+export function resetRateLimiter() {
+  buckets.clear();
+  lastCleanupAt = 0;
 }
 
 function getClientKey(request: NextRequest) {
@@ -22,14 +40,19 @@ function getClientKey(request: NextRequest) {
   return clientIp;
 }
 
-export function checkRateLimit(args: {
-  request: NextRequest;
-  namespace: string;
-  max: number;
-  windowMs: number;
-}) {
-  const now = Date.now();
-  cleanupExpired(now);
+export function checkRateLimit(
+  args: {
+    request: NextRequest;
+    namespace: string;
+    max: number;
+    windowMs: number;
+  },
+  now: number = Date.now(),
+) {
+  if (now - lastCleanupAt >= CLEANUP_INTERVAL_MS) {
+    cleanupExpired(now);
+    lastCleanupAt = now;
+  }
 
   const clientKey = getClientKey(args.request);
   const key = `${args.namespace}:${clientKey}`;
