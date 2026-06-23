@@ -2,8 +2,6 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { differenceInMilliseconds } from "date-fns";
-
 import { env, fliMaxDestinations, hasFliHttpBaseUrl, isFliEnabled } from "@/lib/env";
 import { discoverDirectDestinationsForAirport } from "@/lib/providers/frontier-route-discovery";
 import type { ProviderAdapter, ProviderQuery } from "@/lib/providers/types";
@@ -30,7 +28,8 @@ type FliHealthResponse = {
 
 type FliTransport = "http" | "local";
 
-let healthCache: { at: number; value: Promise<{ ok: boolean; message: string }> } | null = null;
+let healthCache: { at: number; value: Promise<{ ok: boolean; message: string; latencyMs: number }> } | null =
+  null;
 const HEALTH_CACHE_TTL_MS = 60_000;
 
 function isVercelRuntime() {
@@ -164,18 +163,23 @@ async function getFliHealth() {
     return healthCache.value;
   }
 
+  // Measure the real probe round-trip here so healthCheck() can report the
+  // actual last-probe latency instead of the (near-zero) time to read the cache.
+  const probeStart = now;
   const value = runHelper(["health"])
     .then(({ stdout }) => {
       const payload = JSON.parse(stdout) as FliHealthResponse;
       return {
         ok: Boolean(payload.ok),
         message: payload.ok ? `ok (${resolveFliTransport()})` : payload.error ?? "fli unavailable",
+        latencyMs: Date.now() - probeStart,
       };
     })
     .catch((error) => {
       return {
         ok: false,
         message: error instanceof Error ? error.message : "fli unavailable",
+        latencyMs: Date.now() - probeStart,
       };
     });
 
@@ -296,13 +300,14 @@ export class FliAdapter implements ProviderAdapter {
   }
 
   async healthCheck() {
-    const start = new Date();
     const health = await getFliHealth();
 
     return {
       id: this.id,
       ok: health.ok,
-      latencyMs: differenceInMilliseconds(new Date(), start),
+      // The real probe round-trip (memoized with the result), not the time to
+      // read the health cache — a warm-instance check now reports true latency.
+      latencyMs: health.latencyMs,
       message: health.message,
     };
   }
