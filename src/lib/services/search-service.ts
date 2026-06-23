@@ -22,6 +22,15 @@ const SEARCH_QUERY_VERSION = 4;
 
 const MOCK_PROVIDER_ID = "mock-frontier";
 
+// Query params arrive as strings; treat the common falsey tokens as "disable".
+// Previously only the literal "false" disabled requireReturn, so 0/no/off
+// silently coerced back to true (the documented parsing gap).
+const FALSEY_QUERY_TOKENS = new Set(["false", "0", "no", "off"]);
+
+function isFalseyFlag(value: string) {
+  return FALSEY_QUERY_TOKENS.has(value.trim().toLowerCase());
+}
+
 function legsAreMock(legs: FlightLeg[]) {
   return legs.length > 0 && legs.some((leg) => leg.providerId === MOCK_PROVIDER_ID);
 }
@@ -41,7 +50,7 @@ export const searchRequestSchema = z
         if (typeof value === "boolean") {
           return value;
         }
-        return value !== "false";
+        return !isFalseyFlag(value);
       })
       .default(true),
     minNights: z.coerce.number().int().min(1).max(7).default(1),

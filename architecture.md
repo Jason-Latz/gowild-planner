@@ -220,7 +220,6 @@ Key constraints:
 - `provider-fli.healthCheck` latency reflects the memoized probe, not a fresh round-trip.
 - `settings-service.updateSettings` re-reads via `getSettings`, which is upsert-shaped (extra writes on a read path).
 - `digestEvent.fingerprint` is computed and stored but not currently read for dedup (weekly dedup uses the `(userId, isoWeek, digestType)` unique key).
-- `searchRequestSchema.requireReturn` only disables on the literal string `"false"` (other falsey tokens coerce to `true`).
 
 ## Development Workflow
 1. `npm install`
@@ -279,3 +278,4 @@ CI guard:
 | 2026-06-19 | Deploy: changed the cron schedule from hourly to daily (`0 13 * * *`) so it deploys on the Vercel Hobby plan (Hobby permits only daily cron; hourly needs Pro). 13:00 UTC matches the default Chicago Thursday 08:00 send window. | `vercel.json`, `architecture.md` |
 | 2026-06-19 | Fixed client-side Supabase config: the browser client now reads `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` via DIRECT `process.env.*` member access (Next.js only inlines those into the client bundle) instead of through the zod-parsed `env` object, which is empty in the browser and made `/login` report "Sign-in is not configured". | `src/lib/auth/supabase-browser.ts`, `architecture.md` |
 | 2026-06-19 | Made magic-link sign-in work cross-device: `/auth/callback` now handles the `token_hash`+`type` `verifyOtp` flow (recommended server-side; works in any browser) in addition to the PKCE `code` flow. Supabase email templates updated to the `token_hash` URL. (PKCE alone required the link to be opened in the same browser that requested it.) | `src/app/auth/callback/route.ts`, `architecture.md` |
+| 2026-06-23 | Fixed the documented `requireReturn` query-parsing gap: `searchRequestSchema` now disables the return requirement for any common falsey token (`false`/`0`/`no`/`off`, case/space-insensitive) instead of only the literal `"false"`. Truthy/unknown tokens and the absent default still resolve to `true`. Added schema tests; removed the item from Known Limitations. | `src/lib/services/search-service.ts`, `src/lib/services/search-service.test.ts`, `architecture.md` |
