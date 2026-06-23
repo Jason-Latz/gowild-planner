@@ -92,6 +92,8 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [metaSource, setMetaSource] = useState<"cache" | "fresh" | null>(null);
   const [dataSource, setDataSource] = useState<"live" | "mock" | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [lastRequireReturn, setLastRequireReturn] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [watches, setWatches] = useState<Watch[]>([]);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
@@ -180,18 +182,25 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
     }
   }
 
-  async function runSearch() {
+  async function runSearch(overrides?: Partial<SearchState>) {
+    // `overrides` lets actions (e.g. "search without requiring a return") re-run
+    // with tweaked params; reflect them in the form so the UI stays in sync.
+    const effective = { ...search, ...overrides };
+    if (overrides) {
+      setSearch(effective);
+    }
+
     setIsSearching(true);
     setStatus("");
 
     try {
       const params = new URLSearchParams({
-        originGroup: search.originGroup,
-        departDate: search.departDate,
-        maxStops: String(search.maxStops),
-        requireReturn: String(search.requireReturn),
-        minNights: String(search.minNights),
-        maxNights: String(search.maxNights),
+        originGroup: effective.originGroup,
+        departDate: effective.departDate,
+        maxStops: String(effective.maxStops),
+        requireReturn: String(effective.requireReturn),
+        minNights: String(effective.minNights),
+        maxNights: String(effective.maxNights),
       });
 
       const response = await fetch(`/api/search?${params.toString()}`, { headers });
@@ -205,6 +214,8 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
       setResults(payload.results);
       setMetaSource(payload.meta.source);
       setDataSource(payload.meta.dataSource ?? null);
+      setLastRequireReturn(effective.requireReturn);
+      setHasSearched(true);
       setStatus(`Found ${payload.results.length} return-aware destination(s).`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Search failed");
@@ -627,7 +638,30 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
             </div>
           ) : null}
           {results.length === 0 ? (
-            <p className="mt-2 text-sm text-stone-500">Run a search to see destinations.</p>
+            !hasSearched ? (
+              <p className="mt-2 text-sm text-stone-500">Run a search to see destinations.</p>
+            ) : lastRequireReturn ? (
+              <div className="mt-2 text-sm text-stone-600">
+                <p>No destinations matched this search.</p>
+                <p className="mt-2">
+                  Destinations without a feasible return in your night window are hidden. If you
+                  don&apos;t need a guaranteed return trip,{" "}
+                  <button
+                    type="button"
+                    onClick={() => runSearch({ requireReturn: false })}
+                    disabled={isSearching}
+                    className="font-medium text-stone-900 underline underline-offset-2 hover:text-stone-700 disabled:opacity-50"
+                  >
+                    search without requiring a return
+                  </button>
+                  .
+                </p>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-stone-600">
+                No destinations matched. Try a different date, origin, or allowing more stops.
+              </p>
+            )
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {results.map((result) => (
