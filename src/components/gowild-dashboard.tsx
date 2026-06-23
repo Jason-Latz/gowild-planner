@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { format } from "date-fns";
 
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
@@ -171,6 +171,15 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
       });
   }, []);
 
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    // Let Enter from any field (or the submit button) trigger the search instead
+    // of doing nothing / reloading the page.
+    event.preventDefault();
+    if (!isSearching) {
+      void runSearch();
+    }
+  }
+
   async function runSearch() {
     setIsSearching(true);
     setStatus("");
@@ -332,6 +341,7 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
         <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-stone-900/10 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Search</h2>
+            <form onSubmit={handleSearchSubmit}>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-sm">
                 {isDevMode ? "Email identity (dev)" : "Signed in as"}
@@ -434,8 +444,7 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
 
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                type="button"
-                onClick={runSearch}
+                type="submit"
                 disabled={isSearching}
                 className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50"
               >
@@ -449,8 +458,11 @@ export function GoWildDashboard({ mode, initialEmail }: DashboardProps) {
                 Save watch
               </button>
             </div>
+            </form>
 
-            {status ? <p className="mt-3 text-sm text-stone-700">{status}</p> : null}
+            <p role="status" aria-live="polite" className="mt-3 min-h-5 text-sm text-stone-700">
+              {status}
+            </p>
             {metaSource ? <p className="mt-1 text-xs text-stone-500">Result source: {metaSource}</p> : null}
           </div>
 
